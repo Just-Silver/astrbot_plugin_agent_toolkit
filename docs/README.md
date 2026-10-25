@@ -1,0 +1,14 @@
+# 文档地图
+
+本仓库的文档只登记顶层入口，一行一篇。新增文档必须在同一次改动里登记到这里。
+
+| 文档 | 负责什么 | 不写什么 |
+|---|---|---|
+| [research/astrbot-plugin-requirements.md](research/astrbot-plugin-requirements.md) | AstrBot 对第三方插件的硬性要求：元数据、生命周期、工具注册与权限、配置、依赖、数据目录、网络与代码规范 | 本插件自身的工具设计与实现方案 |
+| [research/opencode-webfetch.md](research/opencode-webfetch.md) | OpenCode `webfetch` 工具的行为契约、分层实现、HTML→Markdown 能力边界、已知缺陷、TS→Python 迁移映射 | AstrBot 侧的取舍与实现决策 |
+| [research/runtime-environment.md](research/runtime-environment.md) | 本插件的部署与运行环境事实：Docker 镜像、依赖安装路径、代理与网络 | 平台插件 API 约束 |
+
+## 约定
+
+- 每份文档开头用 HTML 注释声明「负责什么 / 不写什么」。
+- 同一事实只写在归属文档，其他位置留一句加链接，不复制。
