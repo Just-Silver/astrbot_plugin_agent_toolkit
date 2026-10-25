@@ -1,0 +1,26 @@
+{
+  "views": {
+    "toolkit": {
+      "title": "Toolkit",
+      "description": "Inspect the tools this plugin provides and test them directly",
+      "heading": "Agent Toolkit",
+      "tools": "Tools",
+      "count": "{total} tools · {enabled} enabled",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "fetch": "Fetch",
+      "fetching": "Fetching…",
+      "max_chars": "Max chars",
+      "timeout": "Timeout",
+      "seconds": "s",
+      "chars": "chars",
+      "truncated": "Truncated",
+      "not_truncated": "Not truncated",
+      "copy": "Copy",
+      "copied": "Copied",
+      "empty": "No tools registered",
+      "only_once": "Applies to this test only",
+      "request_failed": "Request failed"
+    }
+  }
+}
