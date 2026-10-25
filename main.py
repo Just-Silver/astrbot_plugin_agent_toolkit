@@ -5,7 +5,9 @@ from __future__ import annotations
 from astrbot.api import AstrBotConfig, logger, star
 
 from .webfetch.tool import WebFetchTool
+from .webfetch.webapi import register_routes
 
+PLUGIN_NAME = "astrbot_plugin_agent_toolkit"
 DEFAULT_MAX_CHARS = 8000
 DEFAULT_TIMEOUT = 30
 
@@ -24,6 +26,9 @@ class Main(star.Star):
     def __init__(self, context: star.Context, config: AstrBotConfig | None = None) -> None:
         super().__init__(context, config)
         self.config = config or {}
+        # The view must stay reachable even when the tool is disabled, so routes
+        # are registered before the enabled check.
+        register_routes(self.context, self, PLUGIN_NAME)
         if not self.config.get("enabled", True):
             logger.info("web_fetch is disabled by plugin config.")
             return

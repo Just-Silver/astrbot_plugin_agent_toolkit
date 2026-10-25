@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import re
+import time
+from functools import partial
+
+from .service import run_fetch
 
 DEFAULT_MAX_CHARS = 8000
 DEFAULT_TIMEOUT = 30
@@ -94,3 +98,64 @@ def collect_tools(func_list, package_prefix: str) -> list[dict]:
             }
         )
     return sorted(tools, key=lambda item: item["name"])
+
+
+async def list_tools(plugin) -> dict:
+    """Return the tools this plugin registered.
+
+    Args:
+        plugin: The plugin instance, used for the module prefix and tool manager.
+
+    Returns:
+        A JSON response containing the tool descriptors.
+    """
+    from astrbot.api.web import json_response
+
+    package_prefix = plugin.__class__.__module__.rsplit(".", 1)[0]
+    func_list = plugin.context.get_llm_tool_manager().func_list
+    return json_response({"tools": collect_tools(func_list, package_prefix)})
+
+
+async def test_web_fetch(plugin) -> dict:
+    """Run one fetch for the dashboard test bench.
+
+    Args:
+        plugin: The plugin instance. Reserved for future per-plugin defaults.
+
+    Returns:
+        A JSON response with the shaped result, or a 400 error response.
+    """
+    from astrbot.api.web import error_response, json_response, request
+
+    payload = await request.json(default={})
+    normalized = normalize_test_request(payload if isinstance(payload, dict) else {})
+    if normalized is None:
+        return error_response("url is required", status_code=400)
+
+    url, max_chars, timeout = normalized
+    started = time.perf_counter()
+    output = await run_fetch(url, max_chars=max_chars, timeout=timeout)
+    elapsed_ms = (time.perf_counter() - started) * 1000
+    return json_response(build_test_result(output, elapsed_ms))
+
+
+def register_routes(context, plugin, plugin_name: str) -> None:
+    """Register the toolkit view endpoints under the plugin prefix.
+
+    Args:
+        context: Plugin context providing ``register_web_api``.
+        plugin: The plugin instance passed to the handlers.
+        plugin_name: Plugin package name used as the route prefix.
+    """
+    context.register_web_api(
+        f"/{plugin_name}/tools",
+        partial(list_tools, plugin),
+        ["GET"],
+        "List plugin tools",
+    )
+    context.register_web_api(
+        f"/{plugin_name}/tools/web_fetch/test",
+        partial(test_web_fetch, plugin),
+        ["POST"],
+        "Run one web_fetch call",
+    )
