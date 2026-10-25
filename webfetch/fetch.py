@@ -86,6 +86,8 @@ def is_textual(content_type: str) -> bool:
     mime = mime_of(content_type)
     if not mime or mime.startswith("text/"):
         return True
+    if mime.startswith("image/"):
+        return False
     if mime.endswith("+json") or mime.endswith("+xml"):
         return True
     return mime in {
@@ -104,6 +106,10 @@ def is_html(content_type: str) -> bool:
 def decode_body(body: bytes, content_type: str) -> str:
     """Decode a response body using the declared charset, then common fallbacks.
 
+    A page that declares one encoding but contains a few invalid bytes must stay
+    readable: after the strict attempts fail, the declared charset is retried
+    with replacement instead of switching to a different encoding.
+
     Args:
         body: Raw response bytes.
         content_type: Response content type, possibly carrying a charset.
@@ -111,15 +117,23 @@ def decode_body(body: bytes, content_type: str) -> str:
     Returns:
         The decoded text; invalid bytes are replaced rather than raised.
     """
-    candidates: list[str] = []
     match = _CHARSET_RE.search(content_type)
-    if match:
-        candidates.append(match.group(1))
-    candidates.extend(("utf-8", "gb18030"))
-    for encoding in candidates:
+    declared = match.group(1) if match else None
+
+    strict = [declared] if declared else []
+    strict.extend(("utf-8", "gb18030"))
+    for encoding in strict:
         try:
             return body.decode(encoding)
         except (LookupError, UnicodeDecodeError):
+            continue
+
+    for encoding in (declared, "gb18030", "utf-8"):
+        if not encoding:
+            continue
+        try:
+            return body.decode(encoding, errors="replace")
+        except LookupError:
             continue
     return body.decode("utf-8", errors="replace")
 

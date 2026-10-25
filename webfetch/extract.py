@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import re
+from html import unescape
 
 import trafilatura
 
-_TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
+_HEAD_LIMIT = 65536
+_TITLE_LIMIT = 200
+_TITLE_OPEN_RE = re.compile(r"<title[^>]*>", re.IGNORECASE)
+_TITLE_CLOSE = "</title>"
 _TAG_RE = re.compile(r"<[^>]+>")
-_SPACE_RE = re.compile(r"[ \t\r\f\v]+")
+_SPACE_RE = re.compile(r"\s+")
 
 
 def _collapse(text: str) -> str:
@@ -18,16 +22,25 @@ def _collapse(text: str) -> str:
 def html_title(html: str) -> str:
     """Return the normalized document title, or an empty string.
 
+    The lookup is linear and bounded: a page with thousands of unclosed
+    ``<title>`` tags must not turn title extraction into quadratic work on the
+    event loop.
+
     Args:
         html: Raw HTML.
 
     Returns:
-        The collapsed ``<title>`` text, or ``""`` when absent.
+        The collapsed ``<title>`` text truncated to 200 characters, or ``""``.
     """
-    match = _TITLE_RE.search(html)
+    window = html[:_HEAD_LIMIT]
+    match = _TITLE_OPEN_RE.search(window)
     if not match:
         return ""
-    return _collapse(_TAG_RE.sub("", match.group(1)))
+    end = window.lower().find(_TITLE_CLOSE, match.end())
+    if end == -1:
+        return ""
+    raw = window[match.end() : end]
+    return _collapse(unescape(_TAG_RE.sub("", raw)))[:_TITLE_LIMIT]
 
 
 def extract_content(html: str, fmt: str) -> str:

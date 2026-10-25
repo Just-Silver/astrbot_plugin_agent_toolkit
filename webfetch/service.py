@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Sequence
 
 from .errors import FetchError
@@ -47,10 +48,10 @@ async def run_fetch(
         return f"Error: request failed: {exc}"
 
     if is_html(page.content_type):
-        content = extract_content(page.text, fmt)
+        content = await asyncio.to_thread(extract_content, page.text, fmt)
         if not content:
             return "Error: no readable content found in this page."
-        title = html_title(page.text)
+        title = await asyncio.to_thread(html_title, page.text)
     else:
         content = page.text.strip()
         title = ""

@@ -43,6 +43,17 @@ def test_rejects_image_content_type(allow_public: None) -> None:
         run_fetch(lambda r: httpx.Response(200, headers={"content-type": "image/png"}, content=b"\x89PNG"))
 
 
+def test_rejects_svg_content_type(allow_public: None) -> None:
+    with pytest.raises(FetchError, match="unsupported content type: image/svg"):
+        run_fetch(
+            lambda r: httpx.Response(
+                200,
+                headers={"content-type": "image/svg+xml"},
+                text="<svg><script>alert(1)</script></svg>",
+            )
+        )
+
+
 def test_rejects_declared_oversize(allow_public: None, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(fetch, "MAX_BYTES", 100)
 
@@ -136,3 +147,15 @@ def test_decodes_gbk(allow_public: None) -> None:
 
 def test_accepts_text_without_content_type(allow_public: None) -> None:
     assert run_fetch(lambda r: httpx.Response(200, content=b"raw body")).text == "raw body"
+
+
+def test_gbk_with_invalid_byte_keeps_readable_text(allow_public: None) -> None:
+    body = "中文内容".encode("gbk") + b"\x81"
+    page = run_fetch(
+        lambda r: httpx.Response(
+            200,
+            headers={"content-type": "text/plain; charset=gbk"},
+            content=body,
+        )
+    )
+    assert "中文内容" in page.text

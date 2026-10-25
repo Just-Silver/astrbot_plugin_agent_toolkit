@@ -1,6 +1,7 @@
 """Service orchestration must map every failure to a model-readable string."""
 
 import asyncio
+import time
 
 import pytest
 
@@ -81,3 +82,50 @@ def test_unexpected_exception_is_wrapped(monkeypatch: pytest.MonkeyPatch) -> Non
 
     monkeypatch.setattr(service, "fetch_page", fake)
     assert run() == "Error: request failed: boom"
+
+
+def test_overlong_title_does_not_bypass_max_chars(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake(url: str, **kwargs) -> FetchedPage:
+        return FetchedPage(
+            url=url,
+            content_type="text/html",
+            text="<html><head><title>"
+            + "T" * 1_000_000
+            + "</title></head><body><p>"
+            + "正文。" * 100
+            + "</p></body></html>",
+        )
+
+    monkeypatch.setattr(service, "fetch_page", fake)
+    result = run(max_chars=8000)
+    assert len(result) < 2000
+
+
+def test_extraction_does_not_block_event_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    def slow_extract(html: str, fmt: str) -> str:
+        time.sleep(0.2)
+        return "正文"
+
+    async def fake(url: str, **kwargs) -> FetchedPage:
+        return FetchedPage(url=url, content_type="text/html", text="<html></html>")
+
+    monkeypatch.setattr(service, "fetch_page", fake)
+    monkeypatch.setattr(service, "extract_content", slow_extract)
+
+    ticks = 0
+
+    async def counter() -> None:
+        nonlocal ticks
+        while True:
+            ticks += 1
+            await asyncio.sleep(0.01)
+
+    async def scenario() -> str:
+        task = asyncio.create_task(counter())
+        try:
+            return await service.run_fetch("https://example.com")
+        finally:
+            task.cancel()
+
+    asyncio.run(scenario())
+    assert ticks >= 10

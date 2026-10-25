@@ -1,5 +1,7 @@
 """Content extraction and result formatting."""
 
+import time
+
 from webfetch.extract import build_result, extract_content, html_title
 
 ARTICLE = """
@@ -78,3 +80,14 @@ def test_result_with_large_max_chars_still_reports_exact_totals() -> None:
     result = build_result(url="u", title="", content=content, start=0, max_chars=50000)
     assert "truncated" not in result
     assert content in result
+
+
+def test_title_extraction_stays_fast_on_malformed_html() -> None:
+    html = "<title>" * 8000 + "<p>正文</p>"
+    started = time.perf_counter()
+    html_title(html)
+    assert time.perf_counter() - started < 0.1
+
+
+def test_title_is_bounded() -> None:
+    assert len(html_title("<title>" + "T" * 1_000_000 + "</title>")) <= 200
