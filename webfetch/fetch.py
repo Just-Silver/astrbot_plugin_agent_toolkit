@@ -1,20 +1,40 @@
-"""URL validation and SSRF protection."""
+"""URL validation, SSRF protection, and bounded HTTP fetching."""
 
 from __future__ import annotations
 
 import asyncio
 import ipaddress
+import re
 import socket
 from collections.abc import Sequence
-from urllib.parse import urlsplit
+from dataclasses import dataclass
+from urllib.parse import urljoin, urlsplit
+
+import httpx
 
 from .errors import FetchError
 
 MAX_URL_LENGTH = 2048
+MAX_BYTES = 5 * 1024 * 1024
+MAX_REDIRECTS = 5
+REDIRECT_STATUSES = {301, 302, 303, 307, 308}
+
 PRIVATE_ADDRESS_ERROR = "refusing to fetch a private or reserved address."
 BLOCKED_HOST_ERROR = "blocked by plugin config."
 
-_Address = ipaddress.IPv4Address | ipaddress.IPv6Address
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
+CHALLENGE_USER_AGENT = "Mozilla/5.0 (compatible; AstrBot-WebFetch/1.0)"
+
+ACCEPT_HEADERS = {
+    "markdown": "text/markdown;q=1.0, text/x-markdown;q=0.9, text/plain;q=0.8, text/html;q=0.7, */*;q=0.1",
+    "text": "text/plain;q=1.0, text/markdown;q=0.9, text/html;q=0.8, */*;q=0.1",
+}
+
+_ADDRESS = ipaddress.IPv4Address | ipaddress.IPv6Address
+_CHARSET_RE = re.compile(r"charset\s*=\s*[\"']?([\w.:-]+)", re.IGNORECASE)
 
 # ``is_global`` alone lets multicast and NAT64 through, so the explicit ranges
 # are checked first and act as the authoritative deny list.
@@ -48,6 +68,63 @@ BLOCKED_NETWORKS: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...] = (
 )
 
 
+@dataclass(frozen=True)
+class FetchedPage:
+    """A decoded response body together with its content type."""
+
+    url: str
+    content_type: str
+    text: str
+
+
+def mime_of(content_type: str) -> str:
+    """Return the lowercased MIME type without parameters."""
+    return content_type.split(";", 1)[0].strip().lower()
+
+
+def is_textual(content_type: str) -> bool:
+    """Report whether a content type can be handed to the model as text."""
+    mime = mime_of(content_type)
+    if not mime or mime.startswith("text/"):
+        return True
+    if mime.endswith("+json") or mime.endswith("+xml"):
+        return True
+    return mime in {
+        "application/json",
+        "application/xml",
+        "application/javascript",
+        "application/x-javascript",
+    }
+
+
+def is_html(content_type: str) -> bool:
+    """Report whether a content type should go through HTML extraction."""
+    return mime_of(content_type) in {"text/html", "application/xhtml+xml"}
+
+
+def decode_body(body: bytes, content_type: str) -> str:
+    """Decode a response body using the declared charset, then common fallbacks.
+
+    Args:
+        body: Raw response bytes.
+        content_type: Response content type, possibly carrying a charset.
+
+    Returns:
+        The decoded text; invalid bytes are replaced rather than raised.
+    """
+    candidates: list[str] = []
+    match = _CHARSET_RE.search(content_type)
+    if match:
+        candidates.append(match.group(1))
+    candidates.extend(("utf-8", "gb18030"))
+    for encoding in candidates:
+        try:
+            return body.decode(encoding)
+        except (LookupError, UnicodeDecodeError):
+            continue
+    return body.decode("utf-8", errors="replace")
+
+
 def _validate_shape(url: str) -> str:
     """Return the host of a well-formed http(s) URL.
 
@@ -70,7 +147,7 @@ def _validate_shape(url: str) -> str:
     return parts.hostname
 
 
-def _parse_host(value: str) -> _Address | None:
+def _parse_host(value: str) -> _ADDRESS | None:
     """Parse an IP literal, tolerating IPv6 zone suffixes."""
     try:
         return ipaddress.ip_address(value.split("%", 1)[0])
@@ -78,7 +155,7 @@ def _parse_host(value: str) -> _Address | None:
         return None
 
 
-def _unwrap_mapped(address: _Address) -> _Address:
+def _unwrap_mapped(address: _ADDRESS) -> _ADDRESS:
     """Return the embedded IPv4 address for IPv4-mapped IPv6 literals."""
     if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
         return address.ipv4_mapped
@@ -165,3 +242,93 @@ async def ensure_public_url(url: str, blocked_hosts: Sequence[str] = ()) -> None
     for address in addresses:
         if _is_blocked_address(address):
             raise FetchError(PRIVATE_ADDRESS_ERROR)
+
+
+async def fetch_page(
+    url: str,
+    *,
+    timeout: int,
+    fmt: str,
+    blocked_hosts: Sequence[str] = (),
+    client: httpx.AsyncClient | None = None,
+) -> FetchedPage:
+    """Fetch a URL and return its decoded body.
+
+    Args:
+        url: Target URL.
+        timeout: Read timeout in seconds.
+        fmt: Output format, used to pick the Accept header.
+        blocked_hosts: Extra hostnames or host suffixes to refuse.
+        client: Optional preconfigured client, mainly for tests.
+
+    Returns:
+        The final URL, content type, and decoded text.
+
+    Raises:
+        FetchError: On validation, network, size, status, or content type failures.
+    """
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Accept": ACCEPT_HEADERS.get(fmt, ACCEPT_HEADERS["markdown"]),
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    }
+    request_timeout = httpx.Timeout(10.0, read=float(timeout), write=10.0, pool=10.0)
+
+    owns_client = client is None
+    if client is None:
+        client = httpx.AsyncClient(trust_env=True, follow_redirects=False)
+
+    try:
+        redirects = 0
+        challenge_retried = False
+        current = url
+        while True:
+            await ensure_public_url(current, blocked_hosts)
+            try:
+                async with client.stream("GET", current, headers=headers, timeout=request_timeout) as response:
+                    location = response.headers.get("location")
+                    if response.status_code in REDIRECT_STATUSES and location:
+                        redirects += 1
+                        if redirects > MAX_REDIRECTS:
+                            raise FetchError("too many redirects.")
+                        current = urljoin(current, location)
+                        continue
+                    if (
+                        response.status_code == 403
+                        and response.headers.get("cf-mitigated") == "challenge"
+                        and not challenge_retried
+                    ):
+                        challenge_retried = True
+                        headers = {**headers, "User-Agent": CHALLENGE_USER_AGENT}
+                        continue
+                    if response.status_code >= 400:
+                        raise FetchError(f"HTTP {response.status_code}.")
+
+                    declared = response.headers.get("content-length", "")
+                    if declared.isdigit() and int(declared) > MAX_BYTES:
+                        raise FetchError("response exceeds 5 MB limit.")
+
+                    chunks: list[bytes] = []
+                    total = 0
+                    async for chunk in response.aiter_bytes():
+                        total += len(chunk)
+                        if total > MAX_BYTES:
+                            raise FetchError("response exceeds 5 MB limit.")
+                        chunks.append(chunk)
+
+                    body = b"".join(chunks)
+                    content_type = response.headers.get("content-type", "")
+                    if not is_textual(content_type):
+                        raise FetchError(f"unsupported content type: {mime_of(content_type) or 'unknown'}.")
+                    return FetchedPage(
+                        url=str(response.url),
+                        content_type=content_type,
+                        text=decode_body(body, content_type),
+                    )
+            except httpx.TimeoutException as exc:
+                raise FetchError(f"request timed out after {timeout}s.") from exc
+            except httpx.HTTPError as exc:
+                raise FetchError(f"request failed: {exc}") from exc
+    finally:
+        if owns_client:
+            await client.aclose()
