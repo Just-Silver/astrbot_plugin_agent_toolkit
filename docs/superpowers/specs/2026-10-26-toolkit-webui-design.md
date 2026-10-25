@@ -24,16 +24,28 @@
 - 不做抓取历史、不做统计
 - 不渲染 Markdown（结果展示源码）
 - 不做工具启停开关（AstrBot 工具页负责）
-- 不引入前端构建链
 
 ## 目录结构
 
 ```
-views/
-  toolkit/
-    index.html
-    style.css
-    app.js
+webui/                     # Vue 3 源码（提交）
+  package.json
+  vite.config.ts
+  tsconfig.json
+  index.html
+  src/
+    main.ts
+    App.vue
+    bridge.ts
+    i18n.ts
+    components/
+      ToolList.vue
+      ToolDetail.vue
+      TestBench.vue
+views/toolkit/             # 构建产物（提交）
+  index.html
+  assets/*.js
+  assets/*.css
 .astrbot-plugin/
   i18n/
     zh-CN.json
@@ -43,6 +55,28 @@ webfetch/
 tests/
   test_webapi.py     # 新增
 ```
+
+## 前端工程
+
+- 栈：Vue 3（`<script setup>` + TypeScript）+ Vite 6 + Naive UI 2.x
+- 构建：`pnpm install && pnpm build`，产物直接输出到 `views/toolkit/`
+- `webui/node_modules/` 与 `webui/dist/` 加入 `.gitignore`，构建产物 `views/toolkit/` 提交
+- Vite 配置要点：
+  - `base: './'`（视图带令牌路径前缀，绝对路径会 404）
+  - `build.outDir` 指向 `../views/toolkit`
+  - `build.emptyOutDir: true`
+  - `rollupOptions.output.inlineDynamicImports: true`（iframe 内避免分包加载与 CORS 问题）
+  - `build.cssCodeSplit: false`
+- 不引入 vue-router（单页面）、不引入状态库（用 `ref` / `reactive` 即可）
+- 图标用 `@iconify-json/lucide` + `@iconify/vue`，只在必要处使用
+
+MVVM 分层：
+
+| 层 | 文件 | 职责 |
+|---|---|---|
+| Model | `bridge.ts` | 把 `window.AstrBotPluginView` 包装成类型化的 `fetchTools()` / `runFetch()` / `t()` / 主题与语言订阅 |
+| ViewModel | `App.vue` | 持有 `tools`、`selected`、`loading`、`result`、`error` 状态与动作 |
+| View | `components/*.vue` | 纯展示，props + emit，不直接调 bridge |
 
 ## 后端接口
 
@@ -158,12 +192,11 @@ handler 只负责读请求、调用上述函数、返回响应。单元测试覆
 
 ## 视觉规范
 
-- 全部颜色走 CSS 变量，前缀 `--tk-`；`[data-theme="dark"]` 下覆盖一套
-- 亮色：背景 `#fbfbfc`、面板 `#ffffff`、边框 `#e4e6ea`、正文 `#1c1f23`、次要 `#6b7280`、主色 `#4f7df3`
-- 暗色：背景 `#15171b`、面板 `#1b1e24`、边框 `#2b2f37`、正文 `#e6e8eb`、次要 `#8b93a1`、主色 `#6f9bff`
-- 圆角：外层 14px、控件 8px；结果区等宽字体、行高 1.65
-- 主色只用于按钮、标题前缀、选中项背景，其余用中性色
-- 不使用图片、图标字体或外部 CDN
+- 主题用 Naive UI 的 `NConfigProvider` + `darkTheme`，亮暗由 `bridge.getContext().isDark` 决定，并通过 `onContext` 订阅切换
+- 主题色沿用 Naive UI 默认主色，不自定义品牌色
+- 自定义 CSS 只负责布局与结果区：外层 14px 圆角、控件 8px 圆角，结果区等宽字体、`line-height: 1.65`、`max-height: 60vh`、`overflow: auto`
+- 不覆盖 Naive UI 组件内部样式，避免升级时失效
+- 不使用外部 CDN；图标由 `@iconify-json/lucide` 本地打包
 
 ## 国际化
 
@@ -221,7 +254,11 @@ handler 只负责读请求、调用上述函数、返回响应。单元测试覆
 | `collect_tools` 只保留本插件工具 | 混入其他前缀的工具被过滤 |
 | `collect_tools` 排序稳定 | 按 name 升序 |
 
-前端手工验收（iframe 内无法自动化）：
+前端构建与手工验收：
+
+- `pnpm build` 必须成功，产出 `views/toolkit/index.html` 与 `assets/`
+- `pnpm exec vue-tsc --noEmit` 无类型错误
+- iframe 内无法自动化，交互按上表手工验收
 
 | 步骤 | 期望 |
 |---|---|
@@ -237,14 +274,17 @@ handler 只负责读请求、调用上述函数、返回响应。单元测试覆
 ## 验收标准
 
 1. `pytest` 全绿，`ruff check .` 通过
-2. 插件详情页能打开「工具台」视图
-3. 工具列表只显示本插件的工具，数量与 `func_list` 一致
-4. 测试台输出与命令行 `run_fetch` 完全一致
-5. 亮/暗主题、中/英文切换正常
-6. 窄屏不出现横向溢出
+2. `pnpm build` 成功，`views/toolkit/` 下有 `index.html` 与 `assets/`
+3. `pnpm exec vue-tsc --noEmit` 无类型错误
+4. 插件详情页能打开「工具台」视图
+5. 工具列表只显示本插件的工具，数量与 `func_list` 一致
+6. 测试台输出与命令行 `run_fetch` 完全一致
+7. 亮/暗主题、中/英文切换正常
+8. 窄屏不出现横向溢出
 
 ## 已知限制
 
 - 页面为只读 + 测试，不承担配置修改
 - 每次测试都会真实抓取，没有缓存
 - 测试结果不持久化，刷新即丢
+- 改前端后必须重新 `pnpm build` 并提交 `views/toolkit/` 产物，否则线上仍是旧版本

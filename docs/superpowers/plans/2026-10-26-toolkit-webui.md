@@ -17,7 +17,8 @@
 - `max_chars` clamp 到 1000–50000，缺省 8000；`timeout` clamp 到 5–120，缺省 30
 - 只保留 `handler_module_path` 以 `Main.__module__.rsplit(".", 1)[0]` 为前缀的工具
 - 工具列表按 `name` 升序；没有工具时显示「当前没有注册任何工具」
-- 前端不写配置、不渲染 Markdown、不引入外部 CDN/图标字体
+- 前端不写配置、不渲染 Markdown、不引入外部 CDN（图标用本地打包的 lucide）
+- 前端栈固定为 Vue 3 + Vite + Naive UI + TypeScript；构建产物提交到 `views/toolkit/`
 - 颜色全部走 `--tk-*` CSS 变量，`[data-theme="dark"]` 覆盖
 - 窄屏 <720px 时左栏折成顶部横向标签行
 - 代码注释用英文，docstring 用 Google 格式；`ruff`（line-length 120，target py310）必须通过
@@ -278,21 +279,96 @@ git commit -m "feat: 注册工具台 Web API 路由"
 
 ---
 
-### Task 3: 视图骨架与样式
+### Task 3: 搭建 Vue 工程
 
 **Files:**
-- Create: `views/toolkit/index.html`
-- Create: `views/toolkit/style.css`
+- Create: `webui/package.json`
+- Create: `webui/vite.config.ts`
+- Create: `webui/tsconfig.json`
+- Create: `webui/index.html`
+- Create: `webui/src/main.ts`
+- Create: `webui/src/App.vue`
+- Modify: `.gitignore`
 
 **Interfaces:**
-- Produces: 固定 DOM id，供 Task 4 的 `app.js` 使用
-  - `#tool-count`、`#tool-list`、`#tool-name`、`#tool-status`、`#tool-desc`
-  - `#url-input`、`#fetch-btn`、`#max-chars`、`#timeout`
-  - `#meta`、`#output`、`#copy-btn`、`#error-line`
+- Produces: 可 `pnpm build` 的工程，产物落在 `views/toolkit/`
 
-- [ ] **Step 1: 写 `index.html`**
+- [ ] **Step 1: 写 `webui/package.json`**
 
-结构（顺序固定，class 名可调整，id 必须一致）：
+```json
+{
+  "name": "agent-toolkit-webui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@iconify-json/lucide": "^1.2.121",
+    "@iconify/vue": "^5.0.1",
+    "naive-ui": "^2.41.0",
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.1.0",
+    "typescript": "^5.6.0",
+    "vite": "^6.0.0",
+    "vue-tsc": "^2.1.0"
+  }
+}
+```
+
+- [ ] **Step 2: 写 `webui/vite.config.ts`**
+
+```ts
+import { resolve } from 'node:path'
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+
+export default defineConfig({
+  plugins: [vue()],
+  base: './',
+  build: {
+    outDir: resolve(__dirname, '../views/toolkit'),
+    emptyOutDir: true,
+    cssCodeSplit: false,
+    rollupOptions: {
+      output: {
+        inlineDynamicImports: true,
+        entryFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash][extname]',
+      },
+    },
+  },
+})
+```
+
+- [ ] **Step 3: 写 `webui/tsconfig.json`**
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "jsx": "preserve",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.vue"]
+}
+```
+
+- [ ] **Step 4: 写入口文件**
+
+`webui/index.html`：
 
 ```html
 <!doctype html>
@@ -301,105 +377,127 @@ git commit -m "feat: 注册工具台 Web API 路由"
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Toolkit</title>
-    <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <div class="tk">
-      <header class="tk-top">
-        <span class="tk-title" id="heading">Agent Toolkit</span>
-        <span class="tk-count" id="tool-count"></span>
-      </header>
-      <div class="tk-main">
-        <aside class="tk-side">
-          <div class="tk-side-label" id="tools-label">工具</div>
-          <nav id="tool-list"></nav>
-        </aside>
-        <section class="tk-content">
-          <div class="tk-head">
-            <span class="tk-name" id="tool-name"></span>
-            <span class="tk-badge" id="tool-status"></span>
-          </div>
-          <p class="tk-desc" id="tool-desc"></p>
-          <div class="tk-row">
-            <input class="tk-input" id="url-input" placeholder="https://example.com" />
-            <button class="tk-btn" id="fetch-btn">抓取</button>
-          </div>
-          <div class="tk-adv">
-            <label>字符上限 <input id="max-chars" value="8000" /></label>
-            <label>超时 <input id="timeout" value="30" /> 秒</label>
-            <span class="tk-fade" id="only-once">仅本次测试生效</span>
-          </div>
-          <div class="tk-meta" id="meta"></div>
-          <p class="tk-error" id="error-line" hidden></p>
-          <pre class="tk-out" id="output"></pre>
-          <button class="tk-ghost" id="copy-btn">复制</button>
-        </section>
-      </div>
-    </div>
-    <script type="module" src="./app.js"></script>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
 ```
 
-- [ ] **Step 2: 写 `style.css`**
+`webui/src/main.ts`：创建 Vue 应用并挂载 `#app`。
 
-必须包含：
+`webui/src/App.vue`：先写一个只有标题的空壳，保证能构建。
 
-- `:root` 与 `[data-theme="dark"]` 两套 `--tk-*` 变量（值照抄 spec 的视觉规范）
-- 外层 14px 圆角、控件 8px 圆角
-- `.tk-out` 等宽字体、`line-height: 1.65`、`white-space: pre-wrap`、`overflow: auto`、`max-height: 60vh`
-- `.tk-error` 用错误色
-- `@media (max-width: 720px)`：`.tk-main` 改 `flex-direction: column`，`.tk-side` 变横向滚动
-- 不出现任何硬编码主题色（除错误色），其余全部 `var(--tk-*)`
+- [ ] **Step 5: 更新 `.gitignore`**
 
-- [ ] **Step 3: 检查文件存在与关键 id**
+追加：
 
-Run: `python -c "from pathlib import Path; h=Path('views/toolkit/index.html').read_text(encoding='utf-8'); ids=['tool-list','url-input','fetch-btn','max-chars','timeout','meta','output','copy-btn','error-line']; missing=[i for i in ids if f'id=\"{i}\"' not in h]; print('missing:', missing)"`
-Expected: `missing: []`
+```
+webui/node_modules/
+webui/dist/
+```
 
-- [ ] **Step 4: Commit**
+`views/toolkit/` 是构建产物，必须提交，不要忽略。
+
+- [ ] **Step 6: 安装依赖并构建**
+
+Run: `cd webui && pnpm install`
+Expected: 生成 `pnpm-lock.yaml`，无报错
+
+Run: `pnpm build`
+Expected: `views/toolkit/index.html` 与 `views/toolkit/assets/` 出现
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add views/toolkit/index.html views/toolkit/style.css
-git commit -m "feat: 增加工具台视图骨架与样式"
+git add webui/package.json webui/pnpm-lock.yaml webui/vite.config.ts webui/tsconfig.json webui/index.html webui/src/main.ts webui/src/App.vue .gitignore views/toolkit
+git commit -m "feat: 搭建工具台 Vue 工程"
 ```
 
 ---
 
-### Task 4: 前端交互逻辑
+### Task 4: 实现 MVVM 组件并构建
 
 **Files:**
-- Create: `views/toolkit/app.js`
+- Create: `webui/src/bridge.ts`
+- Create: `webui/src/i18n.ts`
+- Create: `webui/src/components/ToolList.vue`
+- Create: `webui/src/components/ToolDetail.vue`
+- Create: `webui/src/components/TestBench.vue`
+- Modify: `webui/src/App.vue`
 
 **Interfaces:**
-- Consumes: Task 3 的 DOM id、Task 2 的 `GET tools` / `POST tools/web_fetch/test`、`window.AstrBotPluginView`
-- Produces: 可用的工具台页面
+- Consumes: Task 2 的 `GET tools` / `POST tools/web_fetch/test`、Task 3 的工程
+- Produces: 可用的工具台页面，构建产物在 `views/toolkit/`
 
-- [ ] **Step 1: 写 `app.js`**
+- [ ] **Step 1: 写 `bridge.ts`（Model 层）**
 
-必须实现的行为：
+导出以下类型与函数：
 
-1. `const bridge = window.AstrBotPluginView; const ctx = await bridge.ready();`
-2. `const tools = (await bridge.apiGet("tools")).tools;` 渲染 `#tool-list`，每项 `<button class="tk-item">`，`data-name` 存工具名，选中项加 `.on`；`#tool-count` 显示 `N 个工具 · M 个已启用`
-3. 列表为空：`#tool-name` 显示 `empty` 文案，隐藏输入区与结果区
-4. 选中工具：更新 `#tool-name`、`#tool-status`、`#tool-desc`；没有测试能力的工具只显示详情
-5. 抓取：`url = input.value.trim()`，为空直接返回；`#fetch-btn` 置 `disabled` 与 loading 文案；`await bridge.apiPost("tools/web_fetch/test", {url, max_chars, timeout})`
-6. 成功：`#meta` 显示 `${elapsed_ms}ms · ${chars} 字符 · ${truncated ? '已截断' : '未截断'} · ${final_url || '—'}`；`#output.textContent = result.output`；`ok=false` 时给 `#output` 加错误 class
-7. 失败（catch）：`#error-line` 显示「请求失败」，**不清空** `#output`
-8. 复制：优先 `navigator.clipboard.writeText`，不可用时 fallback 到临时 `textarea` + `document.execCommand("copy")`；成功后按钮文案变 `copied` 并在 1.5s 后恢复
-9. Enter 在 `#url-input` 内触发抓取
-10. `bridge.onContext(render)`：语言切换时重渲染文案；`bridge.t("views.toolkit.<key>", fallback)` 取值
+- `interface ToolInfo { name: string; active: boolean; description: string; parameters: Record<string, unknown> }`
+- `interface FetchResult { ok: boolean; output: string; elapsed_ms: number; chars: number; truncated: boolean; final_url: string }`
+- `const bridge = window.AstrBotPluginView`
+- `async function ready(): Promise<void>`
+- `function isDark(): boolean`
+- `function locale(): string`
+- `function t(key: string, fallback: string): string`（内部拼 `views.toolkit.${key}`）
+- `function onContext(handler: () => void): void`
+- `async function fetchTools(): Promise<ToolInfo[]>`
+- `async function runFetch(payload: { url: string; max_chars: number; timeout: number }): Promise<FetchResult>`
+- `async function copyText(text: string): Promise<void>`（`navigator.clipboard` 失败时用 `document.execCommand` fallback）
 
-- [ ] **Step 2: 语法检查**
+`window.AstrBotPluginView` 需要在文件顶部声明类型，避免 `vue-tsc` 报错。
 
-Run: `node --check views/toolkit/app.js`
-Expected: 无输出。如果环境没有 node，跳过并在 Task 5 的容器验收里覆盖。
+- [ ] **Step 2: 写 `i18n.ts`**
 
-- [ ] **Step 3: Commit**
+封装 `t(key, fallback)`，提供 `useI18n()` 返回 `{ t, locale }`，语言变化时通过 `onContext` 触发重渲染（用 `ref` 存 `locale`）。
+
+- [ ] **Step 3: 写 `ToolList.vue`**
+
+- props：`tools: ToolInfo[]`、`selected: string`
+- emits：`select(name: string)`
+- 用 `NList` / `NListItem` 或原生按钮渲染；启用状态用 `NTag` 或小圆点
+- 空列表时显示 `empty` 文案
+- 窄屏下横向滚动（由父级 CSS 控制）
+
+- [ ] **Step 4: 写 `ToolDetail.vue`**
+
+- props：`tool: ToolInfo | null`
+- 展示名称、状态徽标、描述
+- 无工具时显示中等空状态
+
+- [ ] **Step 5: 写 `TestBench.vue`**
+
+- props：`tool: ToolInfo | null`
+- 内部状态：`url`、`maxChars`、`timeout`、`loading`、`result`、`error`
+- 使用 `NInput`、`NButton`、`NInputNumber`、`NAlert`
+- 行为照 spec：Enter 触发、loading 禁点、`ok=false` 红字、请求失败保留上次结果、复制按钮 1.5s 反馈
+- 结果区用 `<pre>`，等宽字体、`white-space: pre-wrap`、`max-height: 60vh`、`overflow: auto`
+
+- [ ] **Step 6: 写 `App.vue`（ViewModel 层）**
+
+- 用 `NConfigProvider` 包住页面，`:theme="isDark ? darkTheme : null"`，`:locale="zhCN"` / `enUS` 按 `locale()` 选择
+- `NMessageProvider` 可选（如果 `TestBench` 用消息提示）
+- 状态：`tools`、`selectedName`、`loadingTools`
+- `onMounted` 调 `fetchTools()`，默认选中第一项
+- `onContext` 时重新渲染文案
+- 布局：顶部标题 + 工具数，左栏 `ToolList`，右栏 `ToolDetail` + `TestBench`
+- 窄屏（<720px）用 CSS 媒体查询把两栏改纵向
+
+- [ ] **Step 7: 构建与类型检查**
+
+Run: `cd webui && pnpm build`
+Expected: `vue-tsc --noEmit` 无错误，构建成功
+
+Run: `ls ../views/toolkit`
+Expected: `index.html` 与 `assets/`
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add views/toolkit/app.js
-git commit -m "feat: 实现工具台前端交互"
+git add webui/src views/toolkit
+git commit -m "feat: 实现工具台 Vue 界面"
 ```
 
 ---
@@ -494,9 +592,9 @@ git commit -m "feat: 补齐工具台国际化与文档"
 | GET tools | 1（纯逻辑）、2（路由） |
 | POST test | 1（纯逻辑）、2（路由） |
 | 返回体字段 | 1 `build_test_result` |
-| 页面结构 | 3 |
+| 页面结构 | 3、4 |
 | 测试台交互 | 4 |
-| 视觉规范 | 3 |
+| 视觉规范 | 3、4 |
 | 国际化 | 5 |
 | 错误处理 | 4（前端）、2（400 响应） |
 | 安全 | 2（固定 endpoint）、1（clamp） |
@@ -511,6 +609,6 @@ git commit -m "feat: 补齐工具台国际化与文档"
 | 工具列表为空 | Task 4 第 3 条，Task 5 验收 |
 | 400 保留上次结果 | Task 4 第 7 条 |
 | 超长输出 | Task 3 `.tk-out` 的 `overflow` 与 `max-height` |
-| 主题切换 | Task 3 CSS 变量 + Task 4 `onContext` |
+| 主题切换 | Task 4 `NConfigProvider` + `onContext` |
 
 **类型一致性**：`normalize_test_request` 返回 `(url, max_chars, timeout)`，Task 2 按此解包；`build_test_result(output, elapsed_ms)` 的两个参数在 Task 2 的调用顺序一致；`collect_tools(func_list, package_prefix)` 的参数顺序在 Task 1 测试与 Task 2 调用一致。
