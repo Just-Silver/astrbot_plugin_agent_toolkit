@@ -1,0 +1,356 @@
+:root {
+  --tk-bg: #fbfbfc;
+  --tk-panel: #ffffff;
+  --tk-border: #e4e6ea;
+  --tk-text: #1c1f23;
+  --tk-muted: #6b7280;
+  --tk-accent: #4f7df3;
+  --tk-soft: #f3f5f9;
+  --tk-danger: #d64545;
+  --tk-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+:root[data-theme="dark"] {
+  --tk-bg: #15171b;
+  --tk-panel: #1b1e24;
+  --tk-border: #2b2f37;
+  --tk-text: #e6e8eb;
+  --tk-muted: #8b93a1;
+  --tk-accent: #6f9bff;
+  --tk-soft: #21252c;
+  --tk-danger: #ff7b7b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--tk-bg);
+  color: var(--tk-text);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 18px;
+}
+
+.tk {
+  max-width: 1080px;
+  margin: 0 auto;
+  border: 1px solid var(--tk-border);
+  border-radius: 14px;
+  background: var(--tk-bg);
+  overflow: hidden;
+}
+
+.tk-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--tk-border);
+  background: var(--tk-panel);
+}
+
+.tk-title {
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.tk-count {
+  font-size: 11px;
+  color: var(--tk-muted);
+}
+
+.tk-main {
+  display: flex;
+  min-height: 420px;
+}
+
+.tk-side {
+  width: 168px;
+  flex: none;
+  padding: 10px 8px;
+  border-right: 1px solid var(--tk-border);
+  background: var(--tk-panel);
+}
+
+.tk-side-label {
+  padding: 4px 8px 8px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tk-muted);
+}
+
+.tk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tk-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 8px 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tk-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tk-item:hover {
+  background: var(--tk-soft);
+}
+
+.tk-item.on {
+  background: var(--tk-soft);
+  font-weight: 600;
+}
+
+.tk-item .dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: #3fb27f;
+}
+
+.tk-item .dot.off {
+  background: var(--tk-muted);
+  opacity: 0.5;
+}
+
+.tk-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding: 16px 18px 18px;
+}
+
+.tk-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.tk-name {
+  font-family: var(--tk-mono);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.tk-badge {
+  display: none;
+  padding: 1px 7px;
+  border: 1px solid rgba(63, 178, 127, 0.4);
+  border-radius: 20px;
+  font-size: 10px;
+  color: #3fb27f;
+}
+
+.tk-badge.on {
+  display: inline-block;
+}
+
+.tk-badge.off {
+  display: inline-block;
+  border-color: var(--tk-border);
+  color: var(--tk-muted);
+}
+
+.tk-desc {
+  margin: -6px 0 2px;
+  font-size: 11.5px;
+  color: var(--tk-muted);
+}
+
+.tk-row {
+  display: flex;
+  gap: 8px;
+}
+
+.tk-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--tk-border);
+  border-radius: 8px;
+  background: var(--tk-panel);
+  color: var(--tk-text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.tk-input:focus,
+.tk-num:focus {
+  outline: none;
+  border-color: var(--tk-accent);
+  box-shadow: 0 0 0 2px rgba(79, 125, 243, 0.18);
+}
+
+.tk-btn {
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--tk-accent);
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tk-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.tk-adv {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--tk-muted);
+}
+
+.tk-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.tk-num {
+  width: 64px;
+  padding: 3px 6px;
+  border: 1px solid var(--tk-border);
+  border-radius: 6px;
+  background: var(--tk-panel);
+  color: var(--tk-text);
+  font: inherit;
+  font-size: 11px;
+}
+
+.tk-fade {
+  color: var(--tk-muted);
+  opacity: 0.8;
+}
+
+.tk-meta {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  min-height: 16px;
+  font-family: var(--tk-mono);
+  font-size: 10.5px;
+  color: var(--tk-muted);
+}
+
+.tk-error {
+  margin: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--tk-danger);
+  border-radius: 8px;
+  color: var(--tk-danger);
+  font-size: 11.5px;
+}
+
+.tk-out {
+  flex: 1;
+  min-height: 180px;
+  max-height: 60vh;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--tk-border);
+  border-radius: 10px;
+  background: var(--tk-panel);
+  color: var(--tk-text);
+  font-family: var(--tk-mono);
+  font-size: 11.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+
+.tk-out.error {
+  border-color: var(--tk-danger);
+  color: var(--tk-danger);
+}
+
+.tk-out:empty::before {
+  content: "—";
+  color: var(--tk-muted);
+}
+
+.tk-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.tk-ghost {
+  padding: 5px 12px;
+  border: 1px solid var(--tk-border);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--tk-muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.tk-ghost:hover {
+  border-color: var(--tk-accent);
+  color: var(--tk-accent);
+}
+
+@media (max-width: 720px) {
+  body {
+    padding: 10px;
+  }
+
+  .tk-main {
+    flex-direction: column;
+  }
+
+  .tk-side {
+    width: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--tk-border);
+    padding: 8px;
+  }
+
+  .tk-side-label {
+    display: none;
+  }
+
+  .tk-list {
+    flex-direction: row;
+  }
+
+  .tk-item {
+    width: auto;
+    white-space: nowrap;
+  }
+}
