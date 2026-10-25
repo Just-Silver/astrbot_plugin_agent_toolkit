@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { NTag } from 'naive-ui'
+import { computed } from 'vue'
 import type { ToolInfo } from '../bridge'
 import { useI18n } from '../i18n'
 
-defineProps<{ tool: ToolInfo | null }>()
+const props = defineProps<{ tool: ToolInfo | null }>()
 const { t } = useI18n()
+
+const intro = computed(() => (props.tool ? t(`tool_${props.tool.name}`, '') : ''))
 </script>
 
 <template>
@@ -14,5 +17,11 @@ const { t } = useI18n()
       {{ tool.active ? t('enabled', '已启用') : t('disabled', '已禁用') }}
     </NTag>
   </div>
-  <p v-if="tool?.description" class="tk-desc">{{ tool.description }}</p>
+
+  <p v-if="intro" class="tk-intro">{{ intro }}</p>
+
+  <p v-if="tool?.description" class="tk-desc">
+    <span class="tk-model-tag">{{ t('model_visible', '模型可见') }}</span>
+    {{ tool.description }}
+  </p>
 </template>

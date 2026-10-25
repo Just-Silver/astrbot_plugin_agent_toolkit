@@ -20,7 +20,9 @@
       "copied": "已复制",
       "empty": "当前没有注册任何工具",
       "only_once": "仅本次测试生效",
-      "request_failed": "请求失败"
+      "request_failed": "请求失败",
+      "model_visible": "模型可见",
+      "tool_web_fetch": "读取网页正文，返回 Markdown 或纯文本。用户给出链接或询问具体页面时使用；仅支持 http 与 https，长文会被截断，可用 start 继续读取。"
     }
   }
 }

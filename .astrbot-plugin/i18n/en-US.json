@@ -20,7 +20,9 @@
       "copied": "Copied",
       "empty": "No tools registered",
       "only_once": "Applies to this test only",
-      "request_failed": "Request failed"
+      "request_failed": "Request failed",
+      "model_visible": "Visible to model",
+      "tool_web_fetch": "Reads the main content of a web page as Markdown or plain text. Use it when the user shares a link or asks about a specific page. http and https only; long pages can be continued with start."
     }
   }
 }
