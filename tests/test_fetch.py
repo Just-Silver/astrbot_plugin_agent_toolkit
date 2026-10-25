@@ -124,6 +124,22 @@ def test_retries_cloudflare_challenge(allow_public: None) -> None:
     assert run_fetch(handler).text == "ok"
     assert len(agents) == 2
     assert agents[0] != agents[1]
+    assert agents[1].startswith("Mozilla/5.0")
+    assert "AstrBot" not in agents[1]
+
+
+def test_sends_browser_navigation_headers(allow_public: None) -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(request.headers)
+        return httpx.Response(200, headers={"content-type": "text/plain"}, text="ok")
+
+    run_fetch(handler)
+    assert seen["sec-fetch-dest"] == "document"
+    assert seen["sec-fetch-mode"] == "navigate"
+    assert seen["sec-fetch-site"] == "none"
+    assert seen["upgrade-insecure-requests"] == "1"
 
 
 def test_maps_timeout(allow_public: None) -> None:
