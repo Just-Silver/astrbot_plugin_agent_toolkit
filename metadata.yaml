@@ -1,0 +1,8 @@
+name: astrbot_plugin_agent_toolkit
+display_name: Agent Toolkit
+short_desc: 为 Agent 提供网页抓取等通用工具的工具集合插件
+desc: 为 AstrBot Agent 提供可独立启用的工具集合。首批包含网页抓取（正文提取、大小与超时上限、SSRF 防护），后续按需扩展消息动作、记忆与语音等能力。
+version: v0.1.0
+author: Just-Silver
+repo: https://github.com/Just-Silver/astrbot_plugin_agent_toolkit
+astrbot_version: ">=4.16,<5"
