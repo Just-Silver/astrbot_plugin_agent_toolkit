@@ -70,7 +70,32 @@ parameters = {
 
 **无开关，始终启用。** 对 Docker 部署尤其必要：容器内 `127.0.0.1`、`172.16.0.0/12` 指向 AstrBot 自身或其他服务。
 
-判定方式：`ipaddress.ip_address(addr).is_global` 为 `False` 即拒绝。覆盖回环、私网、link-local、CGNAT、保留段、组播、未指定地址与 IPv6 ULA。
+判定方式：**显式 CIDR 清单 + `is_global` 兜底**。命中清单直接拒绝；未命中再判 `is_global`，为 `False` 也拒绝。
+
+不能只用 `is_global`：实测 `224.0.0.1`、`ff02::1`、`64:ff9b::1` 的 `is_global` 都是 `True`（组播和 NAT64 会被放行）。
+
+写死清单：
+
+| IPv4 | IPv6 |
+|---|---|
+| `0.0.0.0/8` | `::/128` |
+| `10.0.0.0/8` | `::1/128` |
+| `100.64.0.0/10` | `::ffff:0:0/96` |
+| `127.0.0.0/8` | `64:ff9b::/96` |
+| `169.254.0.0/16` | `100::/64` |
+| `172.16.0.0/12` | `2001:db8::/32` |
+| `192.0.0.0/24` | `2002::/16` |
+| `192.0.2.0/24` | `fc00::/7` |
+| `192.88.99.0/24` | `fe80::/10` |
+| `192.168.0.0/16` | `ff00::/8` |
+| `198.18.0.0/15` | |
+| `198.51.100.0/24` | |
+| `203.0.113.0/24` | |
+| `224.0.0.0/4` | |
+| `240.0.0.0/4` | |
+| `255.255.255.255/32` | |
+
+IPv4-mapped IPv6（`::ffff:0:0/96`）必须拆出内嵌 IPv4 再判，否则 `http://[::ffff:127.0.0.1]/` 能绕过。
 
 规则：
 
@@ -78,6 +103,7 @@ parameters = {
 - host 是域名时必须解析，解析失败即拒绝
 - **任一**解析结果非全局即拒绝（防 DNS 重绑定的一半）
 - 重定向目标重复完整校验，禁止跳到非 http(s)
+- `blocked_hosts` 非空时先做域名匹配，命中即拒绝
 
 DNS 解析用 `asyncio.to_thread(socket.getaddrinfo, ...)`，避免阻塞事件循环。
 
@@ -105,10 +131,20 @@ MIME 白名单（与 OpenCode 一致）：
 
 ## 正文提取
 
-只有一条路径：`trafilatura.extract(html, output_format="markdown"|"txt", include_links=True, include_tables=True, favor_recall=True)`。
+只有一条路径：`trafilatura.extract(html, output_format="markdown"|"txt", include_links=True, include_tables=True, favor_precision=True)`。
 
-- 返回 `None` 或空字符串 → 工具返回 `Error: no readable content found in this page.`
-- 不降级到全页转换，不静默改变输出质量
+`favor_precision=True` 是必须的：实测默认参数和 `favor_recall=True` 都会把 `<nav>` 的文本带进正文，只有 `favor_precision=True` 会剔除导航/页脚并输出正确的 `#` 标题。
+
+判空只在 HTML 没有任何可提取文本节点时发生（实测）：
+
+| 输入 | 结果 |
+|---|---|
+| 空 `<body>`、SPA 空容器、纯 `<img>` 页面 | `None` |
+| 单句 `<p>hello</p>` | `"hello"` |
+| 纯链接列表 | 链接文字 |
+| 短文 + 导航 | 正文（含导航，除非 `favor_precision`） |
+
+返回 `None` 或空字符串 → 工具返回 `Error: no readable content found in this page.`。不降级到全页转换。
 
 `trafilatura` 在模块顶层导入。依赖缺失时让插件加载失败，由 AstrBot 输出加载错误日志；插件本身不做运行时检查，也不降级到其他实现。
 
@@ -119,6 +155,7 @@ MIME 白名单（与 OpenCode 一致）：
 ## 截断与续读
 
 - 默认单次返回 8000 字符（配置项 `max_chars`）
+- 截断必要性：AstrBot 的大结果溢出机制（落盘 + 预览，上限 27500 估算 token）只有在 `computer_use_runtime` 开启、`astrbot_file_read_tool` 存在时才生效。默认部署下不生效，大结果会原样进入上下文
 - `start` 超出正文长度时返回 `(no content)`，并提示 `[start=<n> is beyond the end; total length is <total> characters.]`
 - 截断时在正文后追加：
 
@@ -171,6 +208,7 @@ URL: <最终 URL>
 | `enabled` | bool | true | 是否注册工具 |
 | `max_chars` | int | 8000 | 单次返回字符上限，slider 1000–50000 |
 | `timeout` | int | 30 | 单次请求超时秒数，slider 5–120 |
+| `blocked_hosts` | list | `[]` | 额外要拦的域名。host 完全相等，或以 `.` + 该值结尾时拒绝 |
 
 `enabled=false` 时不调用 `add_llm_tools`，插件静默不注册工具。
 
@@ -225,6 +263,9 @@ astrbot_plugin_agent_toolkit/
 | 用例 | 断言 |
 |---|---|
 | 私网/回环/link-local/CGNAT 地址 | 拒绝，返回私网错误 |
+| 组播地址（`224.0.0.1`、`ff02::1`） | 拒绝 |
+| IPv4-mapped IPv6（`::ffff:127.0.0.1`） | 拒绝 |
+| `blocked_hosts` 命中的域名及其子域 | 拒绝 |
 | 域名解析到私网地址 | 拒绝 |
 | 重定向到私网地址 | 拒绝 |
 | 非 http(s) 协议 | 拒绝 |
