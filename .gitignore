@@ -181,3 +181,6 @@ cython_debug/
 .cursorindexingignore
 # Local agent workspace
 .superpowers/
+
+webui/node_modules/
+webui/dist/

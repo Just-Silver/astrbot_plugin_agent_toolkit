@@ -59,7 +59,7 @@ tests/
 ## 前端工程
 
 - 栈：Vue 3（`<script setup>` + TypeScript）+ Vite 6 + Naive UI 2.x
-- 构建：`pnpm install && pnpm build`，产物直接输出到 `views/toolkit/`
+- 构建：`npm install && npm run build`，产物直接输出到 `views/toolkit/`
 - `webui/node_modules/` 与 `webui/dist/` 加入 `.gitignore`，构建产物 `views/toolkit/` 提交
 - Vite 配置要点：
   - `base: './'`（视图带令牌路径前缀，绝对路径会 404）
@@ -256,8 +256,8 @@ handler 只负责读请求、调用上述函数、返回响应。单元测试覆
 
 前端构建与手工验收：
 
-- `pnpm build` 必须成功，产出 `views/toolkit/index.html` 与 `assets/`
-- `pnpm exec vue-tsc --noEmit` 无类型错误
+- `npm run build` 必须成功，产出 `views/toolkit/index.html` 与 `assets/`
+- `npx vue-tsc --noEmit` 无类型错误
 - iframe 内无法自动化，交互按上表手工验收
 
 | 步骤 | 期望 |
@@ -274,8 +274,8 @@ handler 只负责读请求、调用上述函数、返回响应。单元测试覆
 ## 验收标准
 
 1. `pytest` 全绿，`ruff check .` 通过
-2. `pnpm build` 成功，`views/toolkit/` 下有 `index.html` 与 `assets/`
-3. `pnpm exec vue-tsc --noEmit` 无类型错误
+2. `npm run build` 成功，`views/toolkit/` 下有 `index.html` 与 `assets/`
+3. `npx vue-tsc --noEmit` 无类型错误
 4. 插件详情页能打开「工具台」视图
 5. 工具列表只显示本插件的工具，数量与 `func_list` 一致
 6. 测试台输出与命令行 `run_fetch` 完全一致
@@ -287,4 +287,4 @@ handler 只负责读请求、调用上述函数、返回响应。单元测试覆
 - 页面为只读 + 测试，不承担配置修改
 - 每次测试都会真实抓取，没有缓存
 - 测试结果不持久化，刷新即丢
-- 改前端后必须重新 `pnpm build` 并提交 `views/toolkit/` 产物，否则线上仍是旧版本
+- 改前端后必须重新 `npm run build` 并提交 `views/toolkit/` 产物，否则线上仍是旧版本

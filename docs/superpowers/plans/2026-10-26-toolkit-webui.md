@@ -291,7 +291,7 @@ git commit -m "feat: 注册工具台 Web API 路由"
 - Modify: `.gitignore`
 
 **Interfaces:**
-- Produces: 可 `pnpm build` 的工程，产物落在 `views/toolkit/`
+- Produces: 可 `npm run build` 的工程，产物落在 `views/toolkit/`
 
 - [ ] **Step 1: 写 `webui/package.json`**
 
@@ -402,16 +402,16 @@ webui/dist/
 
 - [ ] **Step 6: 安装依赖并构建**
 
-Run: `cd webui && pnpm install`
-Expected: 生成 `pnpm-lock.yaml`，无报错
+Run: `cd webui && npm install`
+Expected: 生成 `package-lock.json`，无报错
 
-Run: `pnpm build`
+Run: `npm run build`
 Expected: `views/toolkit/index.html` 与 `views/toolkit/assets/` 出现
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add webui/package.json webui/pnpm-lock.yaml webui/vite.config.ts webui/tsconfig.json webui/index.html webui/src/main.ts webui/src/App.vue .gitignore views/toolkit
+git add webui/package.json webui/package-lock.json webui/vite.config.ts webui/tsconfig.json webui/index.html webui/src/main.ts webui/src/App.vue .gitignore views/toolkit
 git commit -m "feat: 搭建工具台 Vue 工程"
 ```
 
@@ -487,7 +487,7 @@ git commit -m "feat: 搭建工具台 Vue 工程"
 
 - [ ] **Step 7: 构建与类型检查**
 
-Run: `cd webui && pnpm build`
+Run: `cd webui && npm run build`
 Expected: `vue-tsc --noEmit` 无错误，构建成功
 
 Run: `ls ../views/toolkit`
