@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from pydantic import Field
-from pydantic.dataclasses import dataclass
-
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
+from pydantic import Field
+from pydantic.dataclasses import dataclass
 
 from .service import SUPPORTED_FORMATS, run_fetch
 

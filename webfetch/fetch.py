@@ -23,8 +23,7 @@ PRIVATE_ADDRESS_ERROR = "refusing to fetch a private or reserved address."
 BLOCKED_HOST_ERROR = "blocked by plugin config."
 
 USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
 CHALLENGE_USER_AGENT = "Mozilla/5.0 (compatible; AstrBot-WebFetch/1.0)"
 

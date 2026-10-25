@@ -22,8 +22,7 @@ def test_html_page_returns_title_and_body(monkeypatch: pytest.MonkeyPatch) -> No
         return FetchedPage(
             url=url,
             content_type="text/html",
-            text="<html><head><title>T</title></head><body>"
-            "<p>正文内容足够长以便被识别为主要内容。</p></body></html>",
+            text="<html><head><title>T</title></head><body><p>正文内容足够长以便被识别为主要内容。</p></body></html>",
         )
 
     monkeypatch.setattr(service, "fetch_page", fake)

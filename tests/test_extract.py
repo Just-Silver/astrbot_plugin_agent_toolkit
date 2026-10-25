@@ -60,9 +60,7 @@ def test_result_truncates_and_points_to_next_start() -> None:
 
 
 def test_result_continues_from_start() -> None:
-    result = build_result(
-        url="https://example.com/a", title="", content="a" * 50 + "b" * 50, start=50, max_chars=40
-    )
+    result = build_result(url="https://example.com/a", title="", content="a" * 50 + "b" * 50, start=50, max_chars=40)
     assert "a" * 40 not in result
     assert "b" * 40 in result
     assert "start=90" in result
