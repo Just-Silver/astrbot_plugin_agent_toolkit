@@ -61,7 +61,7 @@ parameters = {
 6. 大小检查：content-length 预检，再流式累加，上限 5MB
 7. MIME 白名单检查
 8. 按 content-type 解码：HTTP charset → utf-8 → gb18030 → 替换非法字节（`errors="replace"`）
-9. HTML 走正文提取，非 HTML 原样返回
+9. HTML 走 trafilatura，提取为空即报错；非 HTML 原样返回
 10. 截断并按 start 切片
 11. 拼接来源头与续读提示
 ```
@@ -105,14 +105,12 @@ MIME 白名单（与 OpenCode 一致）：
 
 ## 正文提取
 
-HTML 走两条路径：
+只有一条路径：`trafilatura.extract(html, output_format="markdown"|"txt", include_links=True, include_tables=True, favor_recall=True)`。
 
-1. `trafilatura.extract(html, output_format="markdown"|"txt", include_links=True, include_tables=True, favor_recall=True)`
-2. 返回空时回退 `markdownify(html, heading_style="ATX", strip=["script", "style", "noscript", "iframe", "object", "embed", "template"])`
+- 返回 `None` 或空字符串 → 工具返回 `Error: no readable content found in this page.`
+- 不降级到全页转换，不静默改变输出质量
 
-**依赖降级链**：`trafilatura` 导入失败 → `markdownify`；两者都不可用或抛错 → 标准库 `html.parser` 去标签。任何一环失败都不能让工具抛异常，最差也要返回整页纯文本。
-
-回退的意义：SPA 或纯列表页 trafilatura 可能判空，此时宁可给整页文本，也不能返回"读不到"。
+`trafilatura` 在模块顶层导入。依赖缺失时让插件加载失败，由 AstrBot 输出加载错误日志；插件本身不做运行时检查，也不降级到其他实现。
 
 非 HTML（text/plain、JSON、XML）不做任何转换，原样返回。
 
@@ -160,6 +158,7 @@ URL: <最终 URL>
 | HTTP 4xx/5xx | `Error: HTTP <status>.` |
 | 响应过大 | `Error: response exceeds 5 MB limit.` |
 | 类型不支持 | `Error: unsupported content type: <mime>.` |
+| 正文提取为空 | `Error: no readable content found in this page.` |
 
 不抛异常给 Agent Runner，全部转成错误字符串。
 
@@ -179,15 +178,14 @@ URL: <最终 URL>
 
 `requirements.txt`：
 
-```
+```txt
 trafilatura>=2.0.0
-markdownify>=0.13.0
 httpx>=0.27.0
 ```
 
 风险：`trafilatura` 依赖 `lxml`。官方镜像 `python:3.12-slim` 没有 `libxml2-dev`，必须命中 manylinux wheel。实现完成后需在干净环境验证一次安装。
 
-即使依赖安装失败，插件也必须能加载并注册工具：正文提取走降级链，最差返回整页纯文本。
+依赖缺失时插件加载失败，AstrBot 的插件页会显示加载失败并打印错误日志。不做运行时检查，不静默降级。
 
 ## 项目结构
 
@@ -234,7 +232,7 @@ astrbot_plugin_agent_toolkit/
 | 无 content-type 的纯文本 | 允许，原样返回 |
 | 超过 5MB | 拒绝 |
 | 正常 HTML | 返回正文，导航文本不出现 |
-| trafilatura 提取为空 | 回退后仍有内容 |
+| 正文提取为空 | 返回 `Error: no readable content found in this page.` |
 | 长正文 | 截断并带续读提示 |
 | `start` 续读 | 返回后续片段，不重复 |
 | `start` 超过总长 | 空内容 + 总长度提示 |
@@ -249,3 +247,4 @@ astrbot_plugin_agent_toolkit/
 4. 给一个真实公网 URL，能返回正文 Markdown
 5. 请求 `http://127.0.0.1:6185` 被拒绝
 6. 在 `python:3.12-slim` 下 `pip install -r requirements.txt` 一次成功
+7. 人为让 `trafilatura` 导入失败时，插件加载失败并在日志中给出明确原因
