@@ -7,6 +7,7 @@ from webfetch.webapi import (
     TIMEOUT_RANGE,
     build_test_result,
     clamp_int,
+    collect_blocked_hosts,
     collect_tools,
     normalize_test_request,
 )
@@ -100,3 +101,14 @@ def test_collect_tools_maps_fields() -> None:
     assert tool["active"] is True
     assert tool["description"] == "web_fetch tool"
     assert tool["parameters"] == {"type": "object", "properties": {}}
+
+
+def test_collect_blocked_hosts_returns_clean_list() -> None:
+    assert collect_blocked_hosts({"blocked_hosts": ["a.com", " b.com ", ""]}) == ["a.com", "b.com"]
+
+
+def test_collect_blocked_hosts_handles_invalid_config() -> None:
+    assert collect_blocked_hosts({}) == []
+    assert collect_blocked_hosts({"blocked_hosts": None}) == []
+    assert collect_blocked_hosts({"blocked_hosts": "a.com"}) == []
+    assert collect_blocked_hosts(None) == []

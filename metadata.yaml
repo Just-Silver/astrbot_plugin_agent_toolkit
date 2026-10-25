@@ -5,4 +5,4 @@ desc: 为 AstrBot Agent 提供可独立启用的工具集合。首批包含网�
 version: v0.2.0
 author: Just-Silver
 repo: https://github.com/Just-Silver/astrbot_plugin_agent_toolkit
-astrbot_version: ">=4.16,<5"
+astrbot_version: ">=4.29,<5"

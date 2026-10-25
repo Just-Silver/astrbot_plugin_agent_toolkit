@@ -74,6 +74,23 @@ def build_test_result(output: str, elapsed_ms: float) -> dict:
     }
 
 
+def collect_blocked_hosts(config: object) -> list[str]:
+    """Read the configured host block list.
+
+    Args:
+        config: Plugin config mapping, possibly malformed.
+
+    Returns:
+        Non-empty host strings, or an empty list when the config is unusable.
+    """
+    if not isinstance(config, dict):
+        return []
+    raw = config.get("blocked_hosts", [])
+    if not isinstance(raw, list):
+        return []
+    return [str(item).strip() for item in raw if str(item).strip()]
+
+
 def collect_tools(func_list, package_prefix: str) -> list[dict]:
     """List the tools registered by this plugin.
 
@@ -134,7 +151,12 @@ async def test_web_fetch(plugin) -> dict:
 
     url, max_chars, timeout = normalized
     started = time.perf_counter()
-    output = await run_fetch(url, max_chars=max_chars, timeout=timeout)
+    output = await run_fetch(
+        url,
+        max_chars=max_chars,
+        timeout=timeout,
+        blocked_hosts=collect_blocked_hosts(plugin.config),
+    )
     elapsed_ms = (time.perf_counter() - started) * 1000
     return json_response(build_test_result(output, elapsed_ms))
 

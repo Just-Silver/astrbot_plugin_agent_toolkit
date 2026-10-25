@@ -5,6 +5,7 @@ import { fetchTools, isDark, onContext as onBridgeContext, ready, type ToolInfo 
 import ToolDetail from './components/ToolDetail.vue'
 import ToolList from './components/ToolList.vue'
 import TestBench from './components/TestBench.vue'
+import ThemeShell from './components/ThemeShell.vue'
 import { useI18n } from './i18n'
 
 const { t, locale } = useI18n()
@@ -43,7 +44,7 @@ function select(name: string): void {
 <template>
   <NConfigProvider :theme="dark ? darkTheme : null" :locale="naiveLocale">
     <NGlobalStyle />
-    <div class="tk-shell">
+    <ThemeShell>
       <header class="tk-top">
         <span class="tk-title" id="heading">{{ t('heading', 'Agent Toolkit') }}</span>
         <span class="tk-count" id="tool-count">{{ countText }}</span>
@@ -57,6 +58,6 @@ function select(name: string): void {
           <TestBench :tool="selected" />
         </section>
       </main>
-    </div>
+    </ThemeShell>
   </NConfigProvider>
 </template>
