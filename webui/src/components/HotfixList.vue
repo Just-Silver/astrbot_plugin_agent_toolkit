@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NSwitch, NTag } from 'naive-ui'
+import { NButton, NSwitch, NTag } from 'naive-ui'
 import { ref } from 'vue'
 import type { HotfixPatch } from '../bridge'
 import { useI18n } from '../i18n'
@@ -8,8 +8,12 @@ const props = defineProps<{
   patches: HotfixPatch[]
   draft: Record<string, boolean>
   disabled: boolean
+  updating: boolean
 }>()
-const emit = defineEmits<{ (event: 'toggle', name: string): void }>()
+const emit = defineEmits<{
+  (event: 'toggle', name: string): void
+  (event: 'update', name: string): void
+}>()
 const { t } = useI18n('views.hotfix')
 const expanded = ref<Set<string>>(new Set())
 
@@ -31,6 +35,9 @@ function stateLabel(patch: HotfixPatch): string {
   if (isPending(patch)) {
     return t('status_pending', '待应用')
   }
+  if (patch.outdated) {
+    return t('status_outdated', '有新版本')
+  }
   switch (patch.state) {
     case 'applied':
       return t('status_applied', '已应用')
@@ -44,7 +51,7 @@ function stateLabel(patch: HotfixPatch): string {
 }
 
 function stateType(patch: HotfixPatch): 'success' | 'warning' | 'error' | 'default' {
-  if (isPending(patch)) {
+  if (isPending(patch) || patch.outdated) {
     return 'warning'
   }
   switch (patch.state) {
@@ -60,6 +67,9 @@ function stateType(patch: HotfixPatch): 'success' | 'warning' | 'error' | 'defau
 }
 
 function stateHint(patch: HotfixPatch): string {
+  if (patch.outdated) {
+    return t('outdated_hint', '继续运行 v{current}').replace('{current}', patch.applied_version || '-')
+  }
   if (isPending(patch) || patch.state === 'applied') {
     return ''
   }
@@ -95,6 +105,11 @@ function formatTime(value: string): string {
           <NTag size="small" :type="stateType(patch)" round>{{ stateLabel(patch) }}</NTag>
           <span v-if="stateHint(patch)" class="hf-hint" :class="patch.state">{{ stateHint(patch) }}</span>
         </span>
+        <span v-if="patch.outdated" class="hf-col-update" @click.stop>
+          <NButton size="tiny" type="primary" :loading="updating" @click="emit('update', patch.name)">
+            {{ t('update_short', '更新') }}
+          </NButton>
+        </span>
         <span class="hf-col-switch" @click.stop>
           <NSwitch
             size="small"
@@ -106,6 +121,16 @@ function formatTime(value: string): string {
       </div>
 
       <div v-if="expanded.has(patch.name)" class="hf-detail">
+        <div class="hf-detail-line">
+          <span class="hf-label">{{ t('version', '版本') }}：</span>
+          {{ patch.applied_version || '-' }} → {{ patch.latest_version }}
+        </div>
+        <div v-if="patch.changelog.length" class="hf-detail-line">
+          <span class="hf-label">{{ t('changelog', '更新说明') }}：</span>
+          <ul class="hf-changelog">
+            <li v-for="item in patch.changelog" :key="item">{{ item }}</li>
+          </ul>
+        </div>
         <div v-for="target in patch.targets" :key="target" class="hf-detail-line">
           <span class="hf-label">{{ t('targets', '目标') }}：</span>{{ target }}
         </div>

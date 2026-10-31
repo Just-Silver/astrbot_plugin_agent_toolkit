@@ -24,6 +24,10 @@ export interface HotfixPatch {
   state: 'applied' | 'disabled' | 'incompatible' | 'failed'
   reason: string
   applied_at: string
+  latest_version: string
+  applied_version: string
+  outdated: boolean
+  changelog: string[]
 }
 
 export interface HotfixStatus {
@@ -126,6 +130,13 @@ export async function refreshHotfix(): Promise<HotfixStatus> {
     throw new Error('bridge unavailable')
   }
   return await bridge.apiPost<HotfixStatus>('hotfix/refresh')
+}
+
+export async function updateHotfix(names: string[]): Promise<HotfixStatus> {
+  if (!bridge) {
+    throw new Error('bridge unavailable')
+  }
+  return await bridge.apiPost<HotfixStatus>('hotfix/update', { names })
 }
 
 export async function runFetch(payload: {

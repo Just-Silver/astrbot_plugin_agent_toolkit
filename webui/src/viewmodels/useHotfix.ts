@@ -3,6 +3,7 @@ import {
   applyHotfixSelection,
   getHotfixStatus,
   refreshHotfix,
+  updateHotfix,
   type HotfixPatch,
   type HotfixStatus,
 } from '../bridge'
@@ -17,6 +18,7 @@ export function useHotfix() {
     loading: true,
     saving: false,
     refreshing: false,
+    updating: false,
     error: '',
     patches: [] as HotfixPatch[],
     applied: 0,
@@ -84,12 +86,26 @@ export function useHotfix() {
     }
   }
 
+  async function update(name: string): Promise<void> {
+    if (state.updating) {
+      return
+    }
+    state.updating = true
+    try {
+      sync(await updateHotfix([name]))
+    } catch {
+      state.error = t('request_failed', '请求失败')
+    } finally {
+      state.updating = false
+    }
+  }
+
   function toggle(name: string): void {
     state.draft = { ...state.draft, [name]: !state.draft[name] }
     refreshDerived()
   }
 
-  return reactive({ state, load, save, refresh, discard, toggle })
+  return reactive({ state, load, save, refresh, discard, toggle, update })
 }
 
 export type HotfixViewModel = ReturnType<typeof useHotfix>

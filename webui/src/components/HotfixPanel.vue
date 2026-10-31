@@ -63,7 +63,9 @@ function formatTime(value: string): string {
         :patches="vm.state.patches"
         :draft="vm.state.draft"
         :disabled="!vm.state.status?.enabled || vm.state.saving"
+        :updating="vm.state.updating"
         @toggle="vm.toggle"
+        @update="vm.update"
       />
     </div>
   </NSpin>
