@@ -5,8 +5,8 @@ import socket
 
 import pytest
 
-from webfetch import fetch
-from webfetch.errors import FetchError
+from modules.webfetch import fetch
+from modules.webfetch.errors import FetchError
 
 
 def _check(url: str, blocked: tuple[str, ...] = ()) -> None:

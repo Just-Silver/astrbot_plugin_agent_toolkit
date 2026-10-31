@@ -2,7 +2,7 @@
 
 import time
 
-from webfetch.extract import build_result, extract_content, html_title
+from modules.webfetch.extract import build_result, extract_content, html_title
 
 ARTICLE = """
 <html><head><title> demo 页面 </title></head><body>

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from astrbot.api import AstrBotConfig, logger, star
 
-from .webfetch.tool import WebFetchTool
-from .webfetch.webapi import register_routes
+from .modules.webfetch.tool import WebFetchTool
+from .modules.webfetch.webapi import register_routes
 
 PLUGIN_NAME = "astrbot_plugin_agent_toolkit"
 DEFAULT_MAX_CHARS = 8000

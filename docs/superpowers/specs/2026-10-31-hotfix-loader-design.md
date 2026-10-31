@@ -49,12 +49,15 @@ AstrBot 的部分缺陷只能靠替换上游模块里的对象修复（例如 `c
 ## 目录结构
 
 ```
-hotfix/
-├── __init__.py     # 导出 HotfixRuntime
-├── models.py       # Manifest / PatchSpec / Target / AppliedPatch
-├── manifest.py     # 清单读取、校验、路径与版本检查
-├── repo.py         # git 命令封装、缓存目录、更新与回退
-└── loader.py       # 补丁模块加载、注入、还原
+modules/
+├── __init__.py
+├── webfetch/       # 现有工具子包
+└── hotfix/         # 本次新增子包（与 webfetch/ 平级，随插件分发）
+    ├── __init__.py
+    ├── models.py       # Manifest / PatchSpec / Target / AppliedPatch
+    ├── manifest.py     # 清单读取、校验、路径与版本检查
+    ├── repo.py         # git 命令封装、缓存目录、更新与回退
+    └── loader.py       # 补丁模块加载、注入、还原
 
 tests/
 ├── test_hotfix_manifest.py

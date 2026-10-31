@@ -5,9 +5,9 @@ import asyncio
 import httpx
 import pytest
 
-from webfetch import fetch
-from webfetch.errors import FetchError
-from webfetch.fetch import fetch_page
+from modules.webfetch import fetch
+from modules.webfetch.errors import FetchError
+from modules.webfetch.fetch import fetch_page
 
 
 @pytest.fixture

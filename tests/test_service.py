@@ -5,9 +5,9 @@ import time
 
 import pytest
 
-from webfetch import service
-from webfetch.errors import FetchError
-from webfetch.fetch import FetchedPage
+from modules.webfetch import service
+from modules.webfetch.errors import FetchError
+from modules.webfetch.fetch import FetchedPage
 
 
 def run(url: str = "https://example.com/", **kwargs) -> str:

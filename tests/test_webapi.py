@@ -1,6 +1,6 @@
 """Pure logic for the toolkit web API: clamping, request normalization, result shaping."""
 
-from webfetch.webapi import (
+from modules.webfetch.webapi import (
     DEFAULT_MAX_CHARS,
     DEFAULT_TIMEOUT,
     MAX_CHARS_RANGE,
@@ -14,7 +14,7 @@ from webfetch.webapi import (
 
 
 class FakeTool:
-    def __init__(self, name, active=True, module="astrbot_plugin_agent_toolkit.webfetch.tool"):
+    def __init__(self, name, active=True, module="astrbot_plugin_agent_toolkit.modules.webfetch.tool"):
         self.name = name
         self.active = active
         self.handler_module_path = module
