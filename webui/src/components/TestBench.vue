@@ -1,94 +1,54 @@
 <script setup lang="ts">
 import { NButton, NInput, NInputNumber } from 'naive-ui'
-import { computed, ref } from 'vue'
-import { copyText, runFetch, type FetchResult, type ToolInfo } from '../bridge'
+import type { ToolInfo } from '../bridge'
 import { useI18n } from '../i18n'
+import type { WebFetchViewModel } from '../viewmodels/useWebFetch'
 
-const props = defineProps<{ tool: ToolInfo | null }>()
+defineProps<{ tool: ToolInfo | null; vm: WebFetchViewModel }>()
 const { t } = useI18n()
-
-const url = ref('')
-const maxChars = ref<number | null>(8000)
-const timeout = ref<number | null>(30)
-const loading = ref(false)
-const result = ref<FetchResult | null>(null)
-const error = ref('')
-const copied = ref(false)
-
-const disabled = computed(() => !props.tool || loading.value || !url.value.trim())
-
-async function submit(): Promise<void> {
-  if (disabled.value) {
-    return
-  }
-  loading.value = true
-  error.value = ''
-  try {
-    result.value = await runFetch({
-      url: url.value.trim(),
-      max_chars: maxChars.value ?? 8000,
-      timeout: timeout.value ?? 30,
-    })
-  } catch {
-    error.value = t('request_failed', '请求失败')
-  } finally {
-    loading.value = false
-  }
-}
-
-async function copy(): Promise<void> {
-  if (!result.value?.output) {
-    return
-  }
-  await copyText(result.value.output)
-  copied.value = true
-  window.setTimeout(() => {
-    copied.value = false
-  }, 1500)
-}
 </script>
 
 <template>
   <div v-if="tool" class="tk-bench">
     <div class="tk-row">
       <NInput
-        v-model:value="url"
+        v-model:value="vm.state.url"
         placeholder="https://example.com"
-        :disabled="loading"
-        @keyup.enter="submit"
+        :disabled="vm.state.loading"
+        @keyup.enter="vm.submit"
       />
-      <NButton type="primary" :loading="loading" :disabled="disabled" @click="submit">
-        {{ loading ? t('fetching', '抓取中…') : t('fetch', '抓取') }}
+      <NButton type="primary" :loading="vm.state.loading" :disabled="vm.disabled" @click="vm.submit">
+        {{ vm.state.loading ? t('fetching', '抓取中…') : t('fetch', '抓取') }}
       </NButton>
     </div>
 
     <div class="tk-adv">
       <label class="tk-field">
         <span>{{ t('max_chars', '字符上限') }}</span>
-        <NInputNumber v-model:value="maxChars" :min="1000" :max="50000" :step="1000" size="small" />
+        <NInputNumber v-model:value="vm.state.maxChars" :min="1000" :max="50000" :step="1000" size="small" />
       </label>
       <label class="tk-field">
         <span>{{ t('timeout', '超时') }}</span>
-        <NInputNumber v-model:value="timeout" :min="5" :max="120" :step="5" size="small" />
+        <NInputNumber v-model:value="vm.state.timeout" :min="5" :max="120" :step="5" size="small" />
         <span>{{ t('seconds', '秒') }}</span>
       </label>
       <span class="tk-fade">{{ t('only_once', '仅本次测试生效') }}</span>
     </div>
 
-    <div v-if="result" class="tk-meta">
-      <span>{{ result.elapsed_ms }} ms</span>
-      <span>{{ result.chars }} {{ t('chars', '字符') }}</span>
-      <span>{{ result.truncated ? t('truncated', '已截断') : t('not_truncated', '未截断') }}</span>
-      <span>{{ result.final_url || '—' }}</span>
+    <div v-if="vm.state.result" class="tk-meta">
+      <span>{{ vm.state.result.elapsed_ms }} ms</span>
+      <span>{{ vm.state.result.chars }} {{ t('chars', '字符') }}</span>
+      <span>{{ vm.state.result.truncated ? t('truncated', '已截断') : t('not_truncated', '未截断') }}</span>
+      <span>{{ vm.state.result.final_url || '—' }}</span>
     </div>
 
-    <p v-if="error" class="tk-error">{{ error }}</p>
+    <p v-if="vm.state.error" class="tk-error">{{ vm.state.error }}</p>
 
-    <pre v-if="result" class="tk-out" :class="{ error: !result.ok }">{{ result.output }}</pre>
+    <pre v-if="vm.state.result" class="tk-out" :class="{ error: !vm.state.result.ok }">{{ vm.state.result.output }}</pre>
 
-    <div v-if="result" class="tk-actions">
-      <NButton size="small" quaternary @click="copy">
-        {{ copied ? t('copied', '已复制') : t('copy', '复制') }}
+    <div v-if="vm.state.result" class="tk-actions">
+      <NButton size="small" quaternary @click="vm.copy">
+        {{ vm.state.copied ? t('copied', '已复制') : t('copy', '复制') }}
       </NButton>
     </div>
   </div>

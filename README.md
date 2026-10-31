@@ -33,7 +33,7 @@
 
 ## 开发
 
-前端源码在 `webui/`（Vue 3 + Vite + Naive UI），构建产物分别输出到 `views/toolkit/` 与 `views/hotfix/`。修改前端后必须重新构建并提交产物：
+前端源码在 `webui/`（Vue 3 + Vite + Naive UI），遵循 MVVM 分层（Model `bridge.ts` / ViewModel `viewmodels/` / View `components/`），规则见 [`docs/research/webui-mvvm.md`](docs/research/webui-mvvm.md)。构建产物输出到 `views/toolkit/`。修改前端后必须重新构建并提交产物：
 
 ```bash
 cd webui

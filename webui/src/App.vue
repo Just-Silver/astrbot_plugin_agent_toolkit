@@ -1,57 +1,50 @@
 <script setup lang="ts">
 import { NConfigProvider, NGlobalStyle, darkTheme, enUS, zhCN } from 'naive-ui'
 import { computed, onMounted, ref } from 'vue'
-import {
-  fetchTools,
-  isDark,
-  onContext as onBridgeContext,
-  ready,
-  type HotfixStatus,
-  type ToolInfo,
-} from './bridge'
+import { isDark, onContext as onBridgeContext, ready } from './bridge'
 import HotfixPanel from './components/HotfixPanel.vue'
 import WebFetchPanel from './components/WebFetchPanel.vue'
 import ToolList from './components/ToolList.vue'
 import ThemeShell from './components/ThemeShell.vue'
 import { useI18n } from './i18n'
+import { useHotfix } from './viewmodels/useHotfix'
+import { useTools } from './viewmodels/useTools'
+import { useWebFetch } from './viewmodels/useWebFetch'
 
 const { t, locale } = useI18n()
 
-const tools = ref<ToolInfo[]>([])
-const selectedName = ref<string | null>(null)
 const mode = ref<'tool' | 'hotfix'>('tool')
-const hotfixStatus = ref<HotfixStatus | null>(null)
 const dark = ref(isDark())
 
-const selected = computed(() => tools.value.find((tool) => tool.name === selectedName.value) ?? null)
+const tools = useTools()
+const hotfix = useHotfix()
+const webFetch = useWebFetch(computed(() => tools.selectedTool))
+
 const naiveLocale = computed(() => (locale.value.toLowerCase().startsWith('zh') ? zhCN : enUS))
-const hotfixTotal = computed(() => hotfixStatus.value?.patches.length ?? 0)
-const hotfixApplied = computed(
-  () => hotfixStatus.value?.patches.filter((patch) => patch.state === 'applied').length ?? 0,
-)
 
 const countText = computed(() => {
   if (mode.value === 'hotfix') {
     return t('hotfix_count', '{total} 个补丁 · {applied} 个已应用')
-      .replace('{total}', String(hotfixTotal.value))
-      .replace('{applied}', String(hotfixApplied.value))
+      .replace('{total}', String(hotfix.state.patches.length))
+      .replace('{applied}', String(hotfix.state.applied))
   }
   return t('count', '{total} 个工具 · {enabled} 个已启用')
-    .replace('{total}', String(tools.value.length))
-    .replace('{enabled}', String(tools.value.filter((tool) => tool.active).length))
+    .replace('{total}', String(tools.state.tools.length))
+    .replace(
+      '{enabled}',
+      String(tools.state.tools.filter((tool) => tool.active).length),
+    )
 })
 
-const title = computed(() => (mode.value === 'hotfix' ? t('hotfix_heading', '热补丁') : t('heading', 'Agent Toolkit')))
+const title = computed(() =>
+  mode.value === 'hotfix' ? t('hotfix_heading', '热补丁') : t('heading', 'Agent Toolkit'),
+)
 
 onMounted(async () => {
   await ready()
   dark.value = isDark()
-  try {
-    tools.value = await fetchTools()
-  } catch {
-    tools.value = []
-  }
-  selectedName.value = tools.value[0]?.name ?? null
+  await tools.load()
+  await hotfix.load()
   onBridgeContext(() => {
     dark.value = isDark()
   })
@@ -59,7 +52,7 @@ onMounted(async () => {
 
 function selectTool(name: string): void {
   mode.value = 'tool'
-  selectedName.value = name
+  tools.select(name)
 }
 
 function selectHotfix(): void {
@@ -80,8 +73,8 @@ function selectHotfix(): void {
         <aside class="tk-side">
           <div class="tk-side-label">{{ t('tools', '工具') }}</div>
           <ToolList
-            :tools="tools"
-            :selected="mode === 'tool' ? selectedName : null"
+            :tools="tools.state.tools"
+            :selected="mode === 'tool' ? tools.state.selected : null"
             @select="selectTool"
           />
 
@@ -92,17 +85,17 @@ function selectHotfix(): void {
             :class="{ on: mode === 'hotfix' }"
             @click="selectHotfix"
           >
-            <span class="dot" :class="{ off: !hotfixApplied }"></span>
+            <span class="dot" :class="{ off: !hotfix.state.applied }"></span>
             <span class="tk-item-name">{{ t('hotfix_module', '热补丁') }}</span>
-            <span v-if="hotfixTotal" class="tk-item-count">{{ hotfixApplied }}/{{ hotfixTotal }}</span>
+            <span v-if="hotfix.state.patches.length" class="tk-item-count">
+              {{ hotfix.state.applied }}/{{ hotfix.state.patches.length }}
+            </span>
           </button>
         </aside>
 
         <section class="tk-content">
-          <template v-if="mode === 'tool'">
-            <WebFetchPanel :tool="selected" />
-          </template>
-          <HotfixPanel v-else @status="hotfixStatus = $event" />
+          <WebFetchPanel v-if="mode === 'tool'" :tool="tools.selectedTool" :vm="webFetch" />
+          <HotfixPanel v-else :vm="hotfix" />
         </section>
       </main>
     </ThemeShell>
