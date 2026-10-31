@@ -24,7 +24,7 @@ AstrBot 的部分缺陷只能靠替换上游模块里的对象修复（例如 `c
 **做**
 
 - 配置分组 `hotfix`：`enabled` / `repo` / `ref`
-- 清单 `hotfix.json` 的解析与校验（schema、路径、版本、targets）
+- 根清单 `hotfix.json` 与补丁清单 `patches/*/patch.json` 的解析与校验（schema、路径、版本、targets、目录发现）
 - `git clone --depth 1` / `git fetch` 到插件数据目录，失败回退缓存
 - 模块加载、按 targets 注入、记录原值、幂等 apply、逆序还原
 - 结构化日志：每个补丁的 applied / skipped / failed 及原因
@@ -41,9 +41,10 @@ AstrBot 的部分缺陷只能靠替换上游模块里的对象修复（例如 `c
 
 | 术语 | 含义 |
 |---|---|
-| 补丁仓库 | 提供 `hotfix.json` 与补丁文件的远程 git 仓库 |
-| 清单 | 仓库根目录的 `hotfix.json`，声明有哪些补丁、分别注入到哪里 |
-| 补丁模块 | 清单 `file` 指向的 Python 文件，被当作模块加载 |
+| 补丁仓库 | 提供清单与补丁文件的远程 git 仓库 |
+| 根清单 | 仓库根的 `hotfix.json`，只声明格式版本与全局约定，不列补丁 |
+| 补丁清单 | `patches/<name>/patch.json`，声明单个补丁的文件、版本与 targets |
+| 补丁模块 | 补丁清单 `file` 指向的 Python 文件，被当作模块加载 |
 | target | 一次属性替换：把补丁模块的 `source` 赋给目标模块的 `attribute` |
 
 ## 目录结构
@@ -108,46 +109,72 @@ self._hotfix.apply()
 
 ## 清单格式
 
-仓库根 `hotfix.json`：
+仓库布局：
+
+```
+仓库根/
+├── hotfix.json                 # 根清单：格式版本，不列具体补丁
+└── patches/
+    ├── forward-content/
+    │   ├── patch.json          # 补丁清单
+    │   └── chain_parser.py     # 补丁模块
+    └── another-fix/
+        ├── patch.json
+        └── ...
+```
+
+### 根清单 `hotfix.json`
 
 ```json
 {
-  "schema": 1,
-  "patches": [
+  "schema": 1
+}
+```
+
+| 字段 | 必填 | 规则 |
+|---|---|---|
+| `schema` | 是 | 整数，必须等于 `1`；不等则整份仓库拒绝加载 |
+
+根清单不列补丁，补丁多了也不会让它膨胀。未知字段忽略。
+
+### 补丁清单 `patches/<dir>/patch.json`
+
+```json
+{
+  "name": "forward-content",
+  "description": "引用合并转发时读不到转发正文",
+  "file": "chain_parser.py",
+  "astrbot": ">=4.29,<5",
+  "targets": [
     {
-      "name": "forward-content",
-      "description": "引用合并转发时读不到转发正文",
-      "file": "forward-content/chain_parser.py",
-      "astrbot": ">=4.29,<5",
-      "targets": [
-        {
-          "module": "astrbot.core.utils.quoted_message.extractor",
-          "attribute": "OneBotPayloadParser",
-          "source": "OneBotPayloadParser"
-        }
-      ]
+      "module": "astrbot.core.utils.quoted_message.extractor",
+      "attribute": "OneBotPayloadParser",
+      "source": "OneBotPayloadParser"
     }
   ]
 }
 ```
 
-字段与校验：
-
 | 字段 | 必填 | 规则 |
 |---|---|---|
-| `schema` | 是 | 整数，必须等于 `1`；不等则整份清单拒绝 |
-| `patches` | 是 | 数组；为空表示没有补丁，不算错误 |
-| `patches[].name` | 是 | 非空字符串，同清单内唯一 |
-| `patches[].description` | 否 | 字符串，仅用于日志 |
-| `patches[].file` | 是 | 仓库内相对路径；拒绝绝对路径与 `..`，`resolve()` 后必须仍在仓库根内 |
-| `patches[].astrbot` | 否 | PEP 440 版本范围；缺省视为匹配；无法解析则跳过该补丁 |
-| `patches[].enabled` | 否 | 布尔，默认 `true`；`false` 时跳过 |
-| `patches[].import_as` | 否 | 补丁模块的导入名；缺省由 target 推导，见下节。`name` 中的非标识符字符替换为 `_` |
-| `patches[].targets` | 是 | 非空数组，每个 target 必须有非空的 `module` / `attribute` / `source` |
+| `name` | 否 | 缺省取目录名；非空字符串，全仓库唯一；重复时后加载者跳过并告警 |
+| `description` | 否 | 字符串，仅用于日志 |
+| `file` | 是 | 相对补丁目录的路径；拒绝绝对路径与 `..`，`resolve()` 后必须仍在补丁目录内 |
+| `astrbot` | 否 | PEP 440 版本范围；缺省视为匹配；无法解析则跳过该补丁 |
+| `enabled` | 否 | 布尔，默认 `true`；`false` 时跳过 |
+| `import_as` | 否 | 补丁模块的导入名；缺省由 target 推导，见下节。`name` 中的非标识符字符替换为 `_` |
+| `targets` | 是 | 非空数组，每个 target 必须有非空的 `module` / `attribute` / `source` |
 
 未知字段一律忽略，保证清单可向前扩展。
 
 `target.attribute` 必须已存在于目标模块（本设计只做替换，不做新增）；不存在视为补丁与当前上游脱节，整补丁失败。
+
+### 发现规则
+
+- 只扫描仓库根 `patches/` 下的**一层**子目录，不递归、不扫描其他位置
+- 子目录必须有 `patch.json` 才视为补丁；没有的被忽略，不报错
+- 加载顺序按目录名排序，保证每次运行一致
+- `patches/` 不存在或为空：视为没有补丁，不算错误
 
 ## 数据目录
 
@@ -171,9 +198,9 @@ self._hotfix.apply()
 apply():
   1. 校验配置：enabled、repo 为 https
   2. 更新仓库到本地缓存（失败则用现有缓存；无缓存则跳过全部）
-  3. 读取并校验 hotfix.json（失败则跳过全部）
-  4. 逐个补丁：
-     a. enabled / astrbot 版本校验
+  3. 读取并校验根清单 hotfix.json（失败则跳过全部）
+  4. 扫描 patches/*/patch.json，按目录名排序，逐个补丁：
+     a. 校验补丁清单、enabled、name 唯一性、astrbot 版本
      b. 加载补丁模块
      c. 依次注入 targets（任一失败则回滚该补丁已注入的部分，整补丁标记 failed）
   5. 输出汇总日志
@@ -252,7 +279,10 @@ spec.loader.exec_module(module)
 | git 拉取失败，无缓存 | 跳过全部补丁，`warning` |
 | `hotfix.json` 缺失或 JSON 非法 | 跳过全部补丁，`warning` |
 | `schema` 不等于 1 | 跳过全部补丁，`warning` |
-| 单个补丁清单非法（路径穿越等） | 跳过该补丁，其余补丁继续 |
+| `patches/` 不存在或为空 | 视为没有补丁，不告警 |
+| 子目录没有 `patch.json` | 忽略该目录 |
+| 单个 `patch.json` 非法（JSON/字段/路径穿越） | 跳过该补丁，其余补丁继续 |
+| 补丁 `name` 重复 | 后加载的跳过并告警，先加载的保留 |
 | 版本不匹配 | 跳过该补丁，`info` |
 | 补丁模块 import 失败 | 该补丁 failed，其余继续 |
 | target 导入失败 / source 不存在 / attribute 不存在 | 该补丁 failed 并回滚，其余继续 |
@@ -262,8 +292,8 @@ spec.loader.exec_module(module)
 ## 安全边界
 
 - `repo` 只接受 `https://`，拒绝 `http://`、`file://`、`ssh://` 与其他协议
-- 只把清单声明的 `file` 作为入口执行；补丁模块的相对导入限制在其所在目录，不额外扫描或执行仓库内其他脚本
-- 清单 `file` 的 `resolve()` 结果必须在仓库根目录之内，防止路径穿越
+- 只把 `patches/*/patch.json` 声明的 `file` 作为入口执行；只扫描 `patches/` 一层，不递归、不扫描仓库其他目录
+- 补丁清单 `file` 的 `resolve()` 结果必须在该补丁目录之内，防止路径穿越
 - git 子进程不继承交互式凭据输入（`GIT_TERMINAL_PROMPT=0`）
 - 注入目标模块必须可导入、`attribute` 必须已存在，否则整补丁失败，不静默造出新属性
 - 注入行为会写 `info` 日志，包含补丁名、目标模块与属性名，便于审计
@@ -289,7 +319,7 @@ spec.loader.exec_module(module)
 
 | 层 | 用例 |
 |---|---|
-| manifest | 合法清单；`schema` 不符；缺 `name`/`file`/`targets`；`file` 绝对路径与 `..` 穿越；`astrbot` 范围匹配/不匹配/无法解析；未知字段被忽略 |
+| manifest | 根清单合法；`schema` 不符；根清单缺失/非法；子目录无 `patch.json` 被忽略；只扫一层不递归；补丁清单缺 `file`/`targets`；`file` 绝对路径与 `..` 穿越；`astrbot` 范围匹配/不匹配/无法解析；`name` 缺省取目录名；`name` 重复；未知字段被忽略 |
 | repo | 目录不存在时执行 clone；存在时 fetch + reset；`ref` 为 SHA 的路径；git 失败时返回缓存状态；超时 |
 | loader | 正常注入生效；重复 apply 不叠加；单个 target 失败时整补丁回滚；`attribute` 不存在时整补丁回滚；`revert` 恢复原值；补丁模块 import 抛错时清理 `sys.modules` |
 | runtime | 配置关闭时不调用 git；清单缺失时跳过；一个补丁失败不影响另一个；`terminate` 后目标恢复 |
@@ -306,12 +336,24 @@ spec.loader.exec_module(module)
 6. 清单 `file` 含路径穿越时该补丁被拒绝，其他补丁仍可生效
 7. 插件热重载或停用后，被替换的属性恢复原值
 8. 同一配置连续两次 `apply()`，目标属性最终只被替换一次
+9. 新增补丁只新建 `patches/<name>/` 并放入 `patch.json`，根 `hotfix.json` 无需改动
+10. `patches/` 下没有 `patch.json` 的目录被忽略，不影响其他补丁
 
 ## 跨仓库交付
 
-本仓库实现加载器；补丁仓库需要新增根目录 `hotfix.json`：
+本仓库实现加载器；补丁仓库需要按新布局整理：
 
-- `AstrBot-hotfix` 根新增清单，声明 `forward-content` 补丁与它的 target
+```
+AstrBot-hotfix/
+├── hotfix.json                        # {"schema": 1}
+└── patches/
+    └── forward-content/
+        ├── patch.json
+        ├── chain_parser.py
+        └── check-upstream.ps1
+```
+
+- 现有 `forward-content/` 移入 `patches/forward-content/`，并新增 `patch.json`
 - 该仓库 README 补充「可被 astrbot_plugin_agent_toolkit 远程加载」的说明与清单字段表
 
 清单格式以本规格为唯一事实源，补丁仓库只引用，不复制字段定义。
