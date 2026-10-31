@@ -55,12 +55,19 @@ def load_manifest(repo_root: Path) -> tuple[list[PatchSpec], list[str]]:
         return [], [str(exc)]
 
     base = repo_root / patches_dir
-    if not base.is_dir():
-        return [], []
+    try:
+        if not base.is_dir():
+            return [], []
+        patch_dirs = sorted(
+            (path for path in base.iterdir() if path.is_dir()),
+            key=lambda path: path.name,
+        )
+    except OSError as exc:
+        return [], [f"cannot list {patches_dir}: {exc}"]
 
     specs: list[PatchSpec] = []
     seen: set[str] = set()
-    for patch_dir in sorted((path for path in base.iterdir() if path.is_dir()), key=lambda path: path.name):
+    for patch_dir in patch_dirs:
         manifest_path = patch_dir / "patch.json"
         if not manifest_path.is_file():
             continue

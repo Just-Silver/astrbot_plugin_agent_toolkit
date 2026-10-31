@@ -66,6 +66,17 @@ def test_load_manifest_rejects_path_traversal(tmp_path):
     assert any("outside.py" in item or "bad" in item for item in warnings)
 
 
+def test_load_manifest_rejects_absolute_path(tmp_path):
+    (tmp_path / "hotfix.json").write_text('{"schema": 1}', encoding="utf-8")
+    outside = str((tmp_path / "outside.py").resolve())
+    write_patch(tmp_path, "bad", {"file": outside, "targets": [{"module": "m", "attribute": "a", "source": "s"}]})
+
+    specs, warnings = load_manifest(tmp_path)
+
+    assert specs == []
+    assert warnings
+
+
 def test_load_manifest_ignores_directory_without_patch_json(tmp_path):
     (tmp_path / "hotfix.json").write_text('{"schema": 1}', encoding="utf-8")
     (tmp_path / "patches" / "empty").mkdir(parents=True)

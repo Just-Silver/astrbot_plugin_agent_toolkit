@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-_SHA = re.compile(r"[0-9a-f]{40}")
+_SHA = re.compile(r"[0-9a-f]{40}", re.IGNORECASE)
 _INVALID_SLUG = re.compile(r"[^a-z0-9_-]+")
 
 
@@ -68,6 +68,9 @@ class RepoCache:
                     args.extend(["--branch", ref])
                 args.extend([repo_url, str(directory)])
                 self._call(args)
+                if ref and _SHA.fullmatch(ref):
+                    self._call(["git", "-C", str(directory), "fetch", "--depth", "1", "origin", ref])
+                    self._call(["git", "-C", str(directory), "reset", "--hard", "FETCH_HEAD"])
             else:
                 fetch = ["git", "-C", str(directory), "fetch", "--depth", "1", "origin"]
                 if ref:

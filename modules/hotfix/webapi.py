@@ -32,15 +32,20 @@ def build_status(runtime: HotfixRuntime) -> dict[str, Any]:
 
 
 async def handle_status(plugin: Any) -> Any:
-    from astrbot.api.web import json_response
+    from astrbot.api.web import error_response, json_response
 
-    return json_response(build_status(plugin._hotfix))
+    runtime = getattr(plugin, "_hotfix", None)
+    if runtime is None:
+        return error_response("hotfix runtime unavailable", status_code=503)
+    return json_response(build_status(runtime))
 
 
 async def handle_selection(plugin: Any) -> Any:
     from astrbot.api.web import error_response, json_response, request
 
-    runtime = plugin._hotfix
+    runtime = getattr(plugin, "_hotfix", None)
+    if runtime is None:
+        return error_response("hotfix runtime unavailable", status_code=503)
     if not runtime.status()["enabled"]:
         return error_response("hotfix is disabled", status_code=400)
     payload = await request.json(default=None)
@@ -53,7 +58,9 @@ async def handle_selection(plugin: Any) -> Any:
 async def handle_refresh(plugin: Any) -> Any:
     from astrbot.api.web import error_response, json_response
 
-    runtime = plugin._hotfix
+    runtime = getattr(plugin, "_hotfix", None)
+    if runtime is None:
+        return error_response("hotfix runtime unavailable", status_code=503)
     if not runtime.status()["enabled"]:
         return error_response("hotfix is disabled", status_code=400)
     return json_response(runtime.refresh())

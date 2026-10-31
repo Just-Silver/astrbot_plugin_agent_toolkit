@@ -33,9 +33,14 @@ class Main(star.Star):
         register_routes(self.context, self, PLUGIN_NAME)
         register_hotfix_routes(self.context, self, PLUGIN_NAME)
         # Hotfixes are independent of the web_fetch switch and must be applied
-        # before the early return below.
-        self._hotfix = HotfixRuntime(self.config, logger)
-        self._hotfix.apply()
+        # before the early return below. A broken hotfix runtime must never stop
+        # the plugin from loading.
+        try:
+            self._hotfix = HotfixRuntime(self.config, logger)
+            self._hotfix.apply()
+        except Exception as exc:  # noqa: BLE001 - keep the plugin usable
+            logger.warning("hotfix runtime failed to start: %s", exc)
+            self._hotfix = None
         if not self.config.get("enabled", True):
             logger.info("web_fetch is disabled by plugin config.")
             return
@@ -49,4 +54,5 @@ class Main(star.Star):
 
     async def terminate(self) -> None:
         """Release resources and restore every injected patch."""
-        self._hotfix.revert()
+        if self._hotfix is not None:
+            self._hotfix.revert()

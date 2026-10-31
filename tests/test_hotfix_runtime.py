@@ -42,6 +42,9 @@ def make_runtime(tmp_path, monkeypatch, enabled=True, patches=None, selected=Non
     monkeypatch.setattr(runtime_module, "astrbot_version", lambda: "4.29.4")
     config = {"hotfix": {"enabled": enabled, "repo": "https://github.com/o/r", "ref": ""}}
     runtime = HotfixRuntime(config, FakeLogger(), data_root=tmp_path)
+    # The runtime only reads the manifest from an existing checkout; the fake
+    # update never creates one, so stand in for a completed clone.
+    runtime._repo.directory("https://github.com/o/r").mkdir(parents=True, exist_ok=True)
     if selected is not None:
         runtime.set_selection(selected)
     return runtime, calls
@@ -96,3 +99,68 @@ def test_writes_hotfix_log_lines(tmp_path, monkeypatch):
     runtime.apply()
     lines = runtime._logger.infos + runtime._logger.warnings
     assert any("[hotfix]" in line for line in lines)
+
+
+def test_disabled_logs_nothing(tmp_path, monkeypatch):
+    runtime, _ = make_runtime(tmp_path, monkeypatch, enabled=False)
+    runtime.apply()
+    assert not any("[hotfix]" in line for line in runtime._logger.infos + runtime._logger.warnings)
+
+
+def test_disabled_status_uses_cache_without_git(tmp_path, monkeypatch):
+    runtime, calls = make_runtime(tmp_path, monkeypatch, enabled=False, patches=[make_spec()])
+    runtime.apply()
+    assert calls == []
+    assert runtime.status()["patches"][0]["name"] == "demo"
+
+
+def test_selection_does_not_touch_git(tmp_path, monkeypatch):
+    runtime, calls = make_runtime(tmp_path, monkeypatch, patches=[make_spec()])
+    runtime.apply()
+    calls.clear()
+
+    runtime.set_selection(["demo"])
+
+    assert calls == []
+
+
+def test_failed_update_with_cache_sets_error(tmp_path, monkeypatch):
+    runtime, _ = make_runtime(tmp_path, monkeypatch, patches=[make_spec()])
+    runtime._repo.directory("https://github.com/o/r").mkdir(parents=True, exist_ok=True)
+
+    def failing_update(self, repo_url, ref=""):
+        return RepoUpdate(False, "abc1234", "2026-10-31T00:00:00+00:00", "offline")
+
+    monkeypatch.setattr(runtime_module.RepoCache, "update", failing_update)
+    runtime.apply()
+
+    status = runtime.status()
+    assert status["error"] == "offline"
+    assert status["patches"][0]["name"] == "demo"
+
+
+def test_logs_each_patch_failure(tmp_path, monkeypatch):
+    runtime, _ = make_runtime(tmp_path, monkeypatch, patches=[make_spec()], selected=["demo"])
+    runtime.apply()
+    lines = runtime._logger.infos + runtime._logger.warnings
+    assert any("[hotfix] failed: demo" in line for line in lines)
+
+
+def test_unselected_patch_is_never_loaded(tmp_path, monkeypatch):
+    loaded = []
+
+    def spy(self, spec):
+        loaded.append(spec.name)
+
+    monkeypatch.setattr(runtime_module.PatchLoader, "load", spy)
+    runtime, _ = make_runtime(tmp_path, monkeypatch, patches=[make_spec()])
+    runtime.apply()
+
+    assert loaded == []
+
+
+def test_corrupt_state_does_not_break_apply(tmp_path, monkeypatch):
+    (tmp_path / "state.json").write_text("{not json", encoding="utf-8")
+    runtime, _ = make_runtime(tmp_path, monkeypatch, patches=[make_spec()])
+    runtime.apply()
+    assert runtime.status()["patches"][0]["state"] == "disabled"

@@ -54,9 +54,13 @@ class PatchLoader:
         self._restore(applied.targets)
         sys.modules.pop(applied.spec.import_as, None)
 
-    def revert_all(self) -> None:
+    def revert_all(self) -> list[PatchSpec]:
+        reverted: list[PatchSpec] = []
         while self._applied:
-            self.revert(self._applied.pop())
+            applied = self._applied.pop()
+            self.revert(applied)
+            reverted.append(applied.spec)
+        return reverted
 
     def _load_module(self, spec: PatchSpec) -> ModuleType:
         parent = spec.import_as.rsplit(".", 1)[0] if "." in spec.import_as else ""

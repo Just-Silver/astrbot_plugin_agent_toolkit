@@ -64,13 +64,15 @@ class HotfixRuntime:
         self._repo_url = ""
         self._ref = ""
 
-    def apply(self) -> None:
-        """Refresh configuration state and (re)apply the selected patches."""
+    def apply(self, *, sync_repo: bool = True) -> None:
+        """Refresh configuration state and (re)apply the selected patches.
+
+        ``sync_repo=False`` reuses the local checkout, so saving a selection never
+        waits on the network.
+        """
 
         enabled, repo, ref = self._read_config()
         self._enabled, self._repo_url, self._ref = enabled, repo, ref
-        self._commit = ""
-        self._updated_at = ""
         self._error = ""
         self._results = {}
         self._specs = []
@@ -78,7 +80,6 @@ class HotfixRuntime:
 
         if not enabled:
             self._load_cached(repo)
-            self._logger.info("[hotfix] disabled")
             return
 
         if not repo.startswith("https://"):
@@ -86,22 +87,26 @@ class HotfixRuntime:
             self._logger.warning("[hotfix] %s", self._error)
             return
 
-        update = self._repo.update(repo, ref)
-        self._commit = update.commit
-        self._updated_at = update.updated_at
         directory = self._repo.directory(repo)
-        if update.error:
-            self._logger.warning("[hotfix] repo update failed: %s", update.error)
-            if not directory.exists():
+        if sync_repo:
+            update = self._repo.update(repo, ref)
+            self._commit = update.commit
+            self._updated_at = update.updated_at
+            if update.error:
                 self._error = update.error
-                return
-        else:
-            self._logger.info("[hotfix] repo updated: %s @ %s", repo_slug(repo), update.commit)
+                self._logger.warning("[hotfix] repo update failed: %s", update.error)
+                if not directory.exists():
+                    return
+            else:
+                self._logger.info("[hotfix] repo updated: %s @ %s", repo_slug(repo), update.commit)
+        elif not directory.exists():
+            self._error = "repository cache is missing"
+            return
 
         specs, warnings = load_manifest(directory)
         for warning in warnings:
             self._logger.warning("[hotfix] manifest: %s", warning)
-        if warnings and not specs:
+        if warnings and not specs and not self._error:
             self._error = warnings[0]
         self._specs = specs
         self._selected = self._store(repo).load()
@@ -126,8 +131,11 @@ class HotfixRuntime:
     def revert(self) -> None:
         """Undo every injected patch."""
 
-        self._loader.revert_all()
-        self._logger.info("[hotfix] reverted")
+        reverted = self._loader.revert_all()
+        for spec in reverted:
+            self._logger.info("[hotfix] reverted: %s", spec.name)
+        if not reverted:
+            self._logger.info("[hotfix] reverted")
 
     def refresh(self) -> dict[str, Any]:
         """Force a repository refresh and reapply the current selection."""
@@ -143,9 +151,13 @@ class HotfixRuntime:
         known = {spec.name for spec in self._specs}
         normalized = sorted({name for name in selected if isinstance(name, str) and name in known})
         if self._repo_url:
-            self._store(self._repo_url).save(normalized)
+            try:
+                self._store(self._repo_url).save(normalized)
+            except OSError as exc:
+                self._error = f"cannot save selection: {exc}"
+                self._logger.warning("[hotfix] %s", self._error)
         self._logger.info("[hotfix] selection saved: %s", ", ".join(normalized))
-        self.apply()
+        self.apply(sync_repo=False)
         return self.status()
 
     def status(self) -> dict[str, Any]:
@@ -165,9 +177,12 @@ class HotfixRuntime:
     def _load_cached(self, repo: str) -> None:
         if not repo:
             return
-        specs, warnings = load_manifest(self._repo.directory(repo))
-        for warning in warnings:
-            self._logger.warning("[hotfix] manifest: %s", warning)
+        directory = self._repo.directory(repo)
+        if not directory.exists():
+            return
+        # Disabled mode is expected and must stay silent: warnings here would
+        # look like a failure on every normal startup.
+        specs, _warnings = load_manifest(directory)
         self._specs = specs
         if repo.startswith("https://"):
             self._selected = self._store(repo).load()
@@ -180,11 +195,15 @@ class HotfixRuntime:
         current = astrbot_version()
         if not version_matches(spec.astrbot, current):
             reason = f"astrbot {current or 'unknown'} does not satisfy {spec.astrbot}"
+            self._logger.info("[hotfix] skipped: %s: %s", spec.name, reason)
             return self._result(spec, STATE_INCOMPATIBLE, reason)
         try:
             self._loader.load(spec)
         except Exception as exc:  # noqa: BLE001 - one patch must not break the rest
+            self._logger.warning("[hotfix] failed: %s: %s", spec.name, exc)
             return self._result(spec, STATE_FAILED, str(exc))
+        targets = ", ".join(f"{target.module}.{target.attribute}" for target in spec.targets)
+        self._logger.info("[hotfix] applied: %s -> %s", spec.name, targets)
         return self._result(
             spec,
             STATE_APPLIED,
