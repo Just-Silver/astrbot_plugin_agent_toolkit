@@ -20,6 +20,17 @@
 
 工具台不修改配置、不保存历史。配置仍在插件配置页。
 
+## 热补丁
+
+在上游修复前，可以可选地从远程仓库加载补丁，临时改写 AstrBot 运行时的行为。默认关闭。
+
+- 在插件配置页的「远程热补丁」分组里开启，并填写仓库地址（默认 `Just-Silver/AstrBot-hotfix`）与可选的 `ref`
+- 在插件详情页的「热补丁」视图里勾选要启用的补丁，点「应用更改」立即生效，不需要重启容器
+- 补丁默认全部关闭；新增补丁也需要手动开启
+- 拉取失败、清单非法、版本不匹配或注入失败时只跳过对应补丁，`web_fetch` 照常可用
+- 仓库格式见 [`docs/research/astrbot-hotfix-repository.md`](docs/research/astrbot-hotfix-repository.md)
+- 上游修复后请关闭对应补丁，避免旧实现覆盖新逻辑
+
 ## 开发
 
 前端源码在 `webui/`（Vue 3 + Vite + Naive UI），构建产物在 `views/toolkit/`。修改前端后必须重新构建并提交产物：
@@ -52,6 +63,9 @@ https://github.com/Just-Silver/astrbot_plugin_agent_toolkit
 | `max_chars` | int | `8000` | 单次返回的字符上限，超出后提示模型用 `start` 续读 |
 | `timeout` | int | `30` | 单次请求超时（秒） |
 | `blocked_hosts` | list | `[]` | 额外禁止访问的域名；子域同样生效，端口忽略 |
+| `hotfix.enabled` | bool | `false` | 启用远程热补丁 |
+| `hotfix.repo` | string | `https://github.com/Just-Silver/AstrBot-hotfix` | 补丁仓库地址，仅支持 https |
+| `hotfix.ref` | string | `""` | 分支、标签或提交；留空跟随默认分支 |
 
 ## 行为
 
@@ -69,6 +83,7 @@ https://github.com/Just-Silver/astrbot_plugin_agent_toolkit
 - 纯前端渲染（SPA）且无服务端正文的页面会返回 `no readable content`
 - 不做结果缓存
 - 不提供搜索能力；需要搜索请使用 AstrBot 内置的联网搜索
+- 热补丁依赖配置的仓库可访问；上游改动导致注入点消失时，该补丁会显示「加载失败」而不是自动适配
 
 ## 来源声明
 
