@@ -74,3 +74,40 @@ def test_existing_cache_is_usable_after_failure(tmp_path):
     result = RepoCache(tmp_path, runner=failing).update("https://github.com/owner/repo")
     assert result.ok is False
     assert directory.exists()
+
+
+def test_unchanged_remote_skips_reset(tmp_path):
+    calls = []
+
+    def runner(args, timeout):
+        calls.append(args)
+        if "rev-parse" in args:
+            return subprocess.CompletedProcess(args, 0, "abc123", "")
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    cache = RepoCache(tmp_path, runner=runner)
+    (cache.directory("https://github.com/owner/repo") / ".git").mkdir(parents=True)
+
+    result = cache.update("https://github.com/owner/repo")
+
+    assert result.changed is False
+    assert not any("reset" in call for call in calls)
+
+
+def test_changed_remote_resets(tmp_path):
+    calls = []
+
+    def runner(args, timeout):
+        calls.append(args)
+        if "rev-parse" in args:
+            revision = "newsha" if "FETCH_HEAD" in args else "oldsha"
+            return subprocess.CompletedProcess(args, 0, revision, "")
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    cache = RepoCache(tmp_path, runner=runner)
+    (cache.directory("https://github.com/owner/repo") / ".git").mkdir(parents=True)
+
+    result = cache.update("https://github.com/owner/repo")
+
+    assert result.changed is True
+    assert any("reset" in call for call in calls)

@@ -52,12 +52,12 @@ def make_local_spec(tmp_path, name="demo", version="1.0.0"):
     )
 
 
-def make_runtime(tmp_path, monkeypatch, enabled=True, patches=None, selected=None):
+def make_runtime(tmp_path, monkeypatch, enabled=True, patches=None, selected=None, changed=True):
     calls = []
 
     def fake_update(self, repo_url, ref=""):
         calls.append(repo_url)
-        return RepoUpdate(True, "abc1234", "2026-10-31T00:00:00+00:00", "")
+        return RepoUpdate(True, "abc1234", "2026-10-31T00:00:00+00:00", "", changed=changed)
 
     monkeypatch.setattr(runtime_module.RepoCache, "update", fake_update)
     monkeypatch.setattr(runtime_module, "load_manifest", lambda root: (patches or [], []))
@@ -228,3 +228,20 @@ def test_new_version_waits_for_explicit_update(tmp_path, monkeypatch):
     assert "applied" not in str(loaded[-1])
     assert status["outdated"] is False
     assert status["applied_version"] == "2.0.0"
+
+
+def test_refresh_without_repo_changes_skips_reload(tmp_path, monkeypatch):
+    loaded = []
+
+    def fake_load(self, spec):
+        loaded.append(spec.name)
+        return types.SimpleNamespace(spec=spec, module=None, targets=[])
+
+    monkeypatch.setattr(runtime_module.PatchLoader, "load", fake_load)
+    runtime, _ = make_runtime(tmp_path, monkeypatch, patches=[make_spec()], changed=False)
+    runtime.set_selection(["demo"])
+    baseline = len(loaded)
+
+    runtime.refresh()
+
+    assert len(loaded) == baseline

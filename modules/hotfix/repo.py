@@ -26,6 +26,7 @@ class RepoUpdate:
     commit: str
     updated_at: str
     error: str
+    changed: bool = True
 
 
 def repo_slug(repo_url: str) -> str:
@@ -72,10 +73,16 @@ class RepoCache:
                     self._call(["git", "-C", str(directory), "fetch", "--depth", "1", "origin", ref])
                     self._call(["git", "-C", str(directory), "reset", "--hard", "FETCH_HEAD"])
             else:
+                before = self._resolve(directory, "HEAD")
                 fetch = ["git", "-C", str(directory), "fetch", "--depth", "1", "origin"]
                 if ref:
                     fetch.append(ref)
                 self._call(fetch)
+                remote = self._resolve(directory, "FETCH_HEAD")
+                if before and remote and before == remote:
+                    # Nothing new on the remote: leave the checkout and the
+                    # injected classes untouched.
+                    return RepoUpdate(True, before[:7], updated_at, "", changed=False)
                 self._call(["git", "-C", str(directory), "reset", "--hard", "FETCH_HEAD"])
             return RepoUpdate(True, self._head(directory), updated_at, "")
         except (RepoError, OSError, subprocess.TimeoutExpired) as exc:
@@ -89,18 +96,21 @@ class RepoCache:
             raise RepoError(message)
 
     def _head(self, directory: Path) -> str:
+        return self._resolve(directory, "HEAD")[:7]
+
+    def _resolve(self, directory: Path, revision: str) -> str:
         if not (directory / ".git").exists():
             return ""
         try:
             result = self._runner(
-                ["git", "-C", str(directory), "rev-parse", "HEAD"],
+                ["git", "-C", str(directory), "rev-parse", revision],
                 self._timeout,
             )
         except (OSError, subprocess.TimeoutExpired):
             return ""
         if result.returncode != 0:
             return ""
-        return (result.stdout or "").strip()[:7]
+        return (result.stdout or "").strip()
 
 
 def _default_runner(args: list[str], timeout: float) -> subprocess.CompletedProcess[str]:

@@ -71,33 +71,30 @@ class HotfixRuntime:
         self._repo_url = ""
         self._ref = ""
 
-    def apply(self, *, sync_repo: bool = True) -> None:
+    def apply(self, *, sync_repo: bool = True, force: bool = True) -> None:
         """Refresh configuration state and (re)apply the selected patches.
 
         ``sync_repo=False`` reuses the local checkout, so saving a selection never
-        waits on the network.
+        waits on the network. With ``force=False`` an unchanged remote commit is
+        reused as-is: nothing is reset and no patch is reloaded.
         """
 
         enabled, repo, ref = self._read_config()
         self._enabled, self._repo_url, self._ref = enabled, repo, ref
-        self._error = ""
-        self._results = {}
-        self._specs = []
-        self._applied = {}
-        self._applied_versions = {}
-        self._outdated = set()
-        self._loader.revert_all()
 
         if not enabled:
+            self._reset_state()
             self._load_cached(repo)
             return
 
         if not repo.startswith("https://"):
+            self._reset_state()
             self._error = "repo must start with https://"
             self._logger.warning("[hotfix] %s", self._error)
             return
 
         directory = self._repo.directory(repo)
+        update = None
         if sync_repo:
             update = self._repo.update(repo, ref)
             self._commit = update.commit
@@ -106,12 +103,21 @@ class HotfixRuntime:
                 self._error = update.error
                 self._logger.warning("[hotfix] repo update failed: %s", update.error)
                 if not directory.exists():
+                    self._reset_state()
                     return
             else:
                 self._logger.info("[hotfix] repo updated: %s @ %s", repo_slug(repo), update.commit)
+            if not update.changed and self._specs and not force:
+                self._logger.info("[hotfix] no repository changes; reuse loaded patches")
+                return
         elif not directory.exists():
+            self._reset_state()
             self._error = "repository cache is missing"
             return
+
+        self._reset_state()
+        if update is not None and update.error:
+            self._error = update.error
 
         specs, warnings = load_manifest(directory)
         for warning in warnings:
@@ -151,9 +157,9 @@ class HotfixRuntime:
             self._logger.info("[hotfix] reverted")
 
     def refresh(self) -> dict[str, Any]:
-        """Force a repository refresh and reapply the current selection."""
+        """Check the repository once and reapply only when it changed."""
 
-        self.apply()
+        self.apply(sync_repo=True, force=False)
         return self.status()
 
     def set_selection(self, selected: Sequence[str]) -> dict[str, Any]:
@@ -211,6 +217,15 @@ class HotfixRuntime:
             "patches": [self._results[spec.name] for spec in self._specs if spec.name in self._results],
             "error": self._error,
         }
+
+    def _reset_state(self) -> None:
+        self._results = {}
+        self._specs = []
+        self._applied = {}
+        self._applied_versions = {}
+        self._outdated = set()
+        self._error = ""
+        self._loader.revert_all()
 
     def _load_cached(self, repo: str) -> None:
         if not repo:
