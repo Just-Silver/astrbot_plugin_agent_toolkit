@@ -245,10 +245,10 @@ apply():
   3. 读取并校验根清单 hotfix.json（失败则跳过全部）
   4. 读取选择状态（缺失时视为全部关闭）
   5. 扫描 patches/*/patch.json，按目录名排序，逐个补丁：
-     a. 校验补丁清单、name 唯一性、astrbot 版本
-     b. 未被选择的补丁标记 disabled，跳过
-     c. 加载补丁模块
-     d. 依次注入 targets（任一失败则回滚该补丁已注入的部分，整补丁标记 failed）
+     a. 校验补丁清单、name 唯一性
+     b. 未被选择的补丁标记 disabled，跳过（不再判断版本，也不加载）
+     c. 已选择的补丁：版本不匹配标记 incompatible，跳过
+     d. 加载补丁模块并注入；加载或注入失败标记 failed
   6. 输出汇总日志，并更新状态快照供管理界面读取
 ```
 
@@ -363,6 +363,8 @@ Just-Silver/AstrBot-hotfix · main · 3f9c1ab · 更新于 14:22
 | `failed` | 已启用，但加载或注入失败；`reason` 说明原因 |
 | `pending` | 仅前端本地状态：勾选已改、尚未应用 |
 
+状态判定按顺序短路：未选择 → `disabled`；已选择但版本不匹配 → `incompatible`；已选择但加载/注入失败 → `failed`；否则 `applied`。因此一个未启用且版本不匹配的补丁显示为 `disabled`，不会干扰用户的开关选择。
+
 ### 接口契约
 
 接口前缀 `/{plugin_name}/hotfix`，用 `context.register_web_api` 注册，沿用现有视图的鉴权。
@@ -397,6 +399,7 @@ Just-Silver/AstrBot-hotfix · main · 3f9c1ab · 更新于 14:22
 - `patches` 来自最近一次成功读取的清单缓存；从未成功时为空数组
 - `error` 非空表示最近一次拉取/应用失败，前端显示提示条
 - 未启用（`enabled=false`）时仍返回缓存清单，供用户查看
+- 本接口只读本地状态与缓存，不触发 git 与注入
 
 **`POST /{plugin_name}/hotfix/selection`**
 
@@ -408,11 +411,13 @@ Just-Silver/AstrBot-hotfix · main · 3f9c1ab · 更新于 14:22
 - 保存状态 → `revert()` → `apply()`，使用最新缓存（不触发 git）
 - 返回结构与 `GET /status` 相同
 - 请求体不是对象、`selected` 不是字符串数组：400
+- `enabled=false`：400，正文说明热补丁未启用
 
 **`POST /{plugin_name}/hotfix/refresh`**
 
 - 强制更新仓库（失败回退缓存）→ 重读清单 → 按现有选择 `revert()` + `apply()`
 - 返回结构与 `GET /status` 相同；业务失败放在 `error`，不返回 500
+- `enabled=false`：400，不触发 git
 
 ### 交互流程
 
