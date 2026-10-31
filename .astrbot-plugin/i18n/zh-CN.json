@@ -23,6 +23,32 @@
       "request_failed": "请求失败",
       "model_visible": "模型可见",
       "tool_web_fetch": "读取网页正文，返回 Markdown 或纯文本。用户给出链接或询问具体页面时使用；仅支持 http 与 https，长文会被截断，可用 start 继续读取。"
+    },
+    "hotfix": {
+      "title": "热补丁",
+      "description": "查看远程热补丁仓库，选择要启用的补丁",
+      "heading": "热补丁",
+      "refresh": "刷新",
+      "refreshing": "刷新中…",
+      "summary": "{total} 个补丁 · {applied} 个已应用 · {pending} 个待应用",
+      "apply_count": "应用更改（{count}）",
+      "discard": "放弃",
+      "col_patch": "补丁",
+      "col_version": "适用版本",
+      "col_state": "状态",
+      "col_enabled": "启用",
+      "status_applied": "已应用",
+      "status_disabled": "未启用",
+      "status_incompatible": "版本不匹配",
+      "status_failed": "加载失败",
+      "status_pending": "待应用",
+      "targets": "目标",
+      "file": "文件",
+      "applied_at": "上次应用",
+      "empty": "仓库里没有补丁",
+      "no_repo": "未配置仓库",
+      "not_enabled": "热补丁未启用，请在插件配置页开启",
+      "request_failed": "请求失败"
     }
   }
 }

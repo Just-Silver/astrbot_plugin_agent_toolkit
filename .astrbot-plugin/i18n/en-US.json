@@ -23,6 +23,32 @@
       "request_failed": "Request failed",
       "model_visible": "Visible to model",
       "tool_web_fetch": "Reads the main content of a web page as Markdown or plain text. Use it when the user shares a link or asks about a specific page. http and https only; long pages can be continued with start."
+    },
+    "hotfix": {
+      "title": "Hotfixes",
+      "description": "Inspect the remote hotfix repository and choose which patches to enable",
+      "heading": "Hotfixes",
+      "refresh": "Refresh",
+      "refreshing": "Refreshing…",
+      "summary": "{total} patches · {applied} applied · {pending} pending",
+      "apply_count": "Apply changes ({count})",
+      "discard": "Discard",
+      "col_patch": "Patch",
+      "col_version": "AstrBot",
+      "col_state": "State",
+      "col_enabled": "Enabled",
+      "status_applied": "Applied",
+      "status_disabled": "Disabled",
+      "status_incompatible": "Incompatible",
+      "status_failed": "Failed",
+      "status_pending": "Pending",
+      "targets": "Targets",
+      "file": "File",
+      "applied_at": "Last applied",
+      "empty": "No patches in the repository",
+      "no_repo": "No repository configured",
+      "not_enabled": "Hotfixes are disabled; enable them on the plugin config page",
+      "request_failed": "Request failed"
     }
   }
 }

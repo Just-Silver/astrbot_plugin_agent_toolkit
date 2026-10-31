@@ -14,6 +14,29 @@ export interface FetchResult {
   final_url: string
 }
 
+export interface HotfixPatch {
+  name: string
+  description: string
+  file: string
+  astrbot: string
+  targets: string[]
+  selected: boolean
+  state: 'applied' | 'disabled' | 'incompatible' | 'failed'
+  reason: string
+  applied_at: string
+}
+
+export interface HotfixStatus {
+  enabled: boolean
+  repo: string
+  ref: string
+  commit: string
+  updated_at: string
+  astrbot_version: string
+  patches: HotfixPatch[]
+  error: string
+}
+
 interface BridgeContext {
   pluginName: string
   displayName: string
@@ -57,15 +80,19 @@ export function locale(): string {
   return bridge?.getLocale() ?? 'zh-CN'
 }
 
-export function t(key: string, fallback: string): string {
+export function tFor(prefix: string, key: string, fallback: string): string {
   if (!bridge) {
     return fallback
   }
   try {
-    return bridge.t(`views.toolkit.${key}`, fallback) || fallback
+    return bridge.t(`${prefix}.${key}`, fallback) || fallback
   } catch {
     return fallback
   }
+}
+
+export function t(key: string, fallback: string): string {
+  return tFor('views.toolkit', key, fallback)
 }
 
 export function onContext(handler: () => void): void {
@@ -78,6 +105,27 @@ export async function fetchTools(): Promise<ToolInfo[]> {
   }
   const data = await bridge.apiGet<{ tools?: ToolInfo[] }>('tools')
   return Array.isArray(data?.tools) ? data.tools : []
+}
+
+export async function getHotfixStatus(): Promise<HotfixStatus> {
+  if (!bridge) {
+    throw new Error('bridge unavailable')
+  }
+  return await bridge.apiGet<HotfixStatus>('hotfix/status')
+}
+
+export async function applyHotfixSelection(selected: string[]): Promise<HotfixStatus> {
+  if (!bridge) {
+    throw new Error('bridge unavailable')
+  }
+  return await bridge.apiPost<HotfixStatus>('hotfix/selection', { selected })
+}
+
+export async function refreshHotfix(): Promise<HotfixStatus> {
+  if (!bridge) {
+    throw new Error('bridge unavailable')
+  }
+  return await bridge.apiPost<HotfixStatus>('hotfix/refresh')
 }
 
 export async function runFetch(payload: {
