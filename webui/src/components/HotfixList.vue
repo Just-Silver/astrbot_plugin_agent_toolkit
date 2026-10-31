@@ -105,6 +105,11 @@ function formatTime(value: string): string {
           <NTag size="small" :type="stateType(patch)" round>{{ stateLabel(patch) }}</NTag>
           <span v-if="stateHint(patch)" class="hf-hint" :class="patch.state">{{ stateHint(patch) }}</span>
         </span>
+        <span v-if="patch.outdated" class="hf-col-update" @click.stop>
+          <NButton size="tiny" type="primary" :loading="updating" @click="emit('update', patch.name)">
+            {{ t('update_short', '更新') }}
+          </NButton>
+        </span>
         <span class="hf-col-switch" @click.stop>
           <NSwitch
             size="small"
@@ -134,11 +139,6 @@ function formatTime(value: string): string {
         </div>
         <div v-if="patch.applied_at" class="hf-detail-line">
           <span class="hf-label">{{ t('applied_at', '上次应用') }}：</span>{{ formatTime(patch.applied_at) }}
-        </div>
-        <div v-if="patch.outdated" class="hf-update">
-          <NButton size="tiny" type="primary" :loading="updating" @click.stop="emit('update', patch.name)">
-            {{ t('update', '更新到 v{version}').replace('{version}', patch.latest_version) }}
-          </NButton>
         </div>
         <div v-if="patch.reason && !isPending(patch)" class="hf-detail-line hf-reason">
           {{ patch.reason }}

@@ -51,6 +51,7 @@
       "version": "Version",
       "changelog": "Changes",
       "update": "Update to v{version}",
+      "update_short": "Update",
       "targets": "Targets",
       "file": "File",
       "applied_at": "Last applied",

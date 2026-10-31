@@ -437,3 +437,10 @@ body {
   font-size: 10px;
   color: var(--tk-muted);
 }
+
+.hf-col-update {
+  width: 64px;
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+}
