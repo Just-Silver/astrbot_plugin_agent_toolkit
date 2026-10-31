@@ -15,6 +15,8 @@
 
 - 前端改为 MVVM 分层：Model `bridge.ts`、ViewModel `viewmodels/`、View `components/`
 - 业务代码收进 `modules/`，插件根只保留 `main.py`
+- 仓库检查：启动与手动刷新各检查一次，远端 commit 未变化时跳过 reset 与重新注入
+- 补丁行未展开时也直接显示更新按钮
 
 ### Docs
 
