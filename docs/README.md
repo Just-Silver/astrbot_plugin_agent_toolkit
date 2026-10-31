@@ -10,6 +10,7 @@
 | [superpowers/specs/2026-10-26-web-fetch-design.md](superpowers/specs/2026-10-26-web-fetch-design.md) | `web_fetch` 工具的设计、契约、安全约束与验收标准（历史文档，只读） | 发布流程与仓库运营 |
 | [superpowers/plans/2026-10-26-web-fetch.md](superpowers/plans/2026-10-26-web-fetch.md) | `web_fetch` 的分任务实现计划（历史文档，只读） | 设计取舍的理由 |
 | [superpowers/specs/2026-10-26-toolkit-webui-design.md](superpowers/specs/2026-10-26-toolkit-webui-design.md) | 插件 WebUI「工具台」的界面结构、接口契约与验收标准 | 实现步骤与发布流程 |
+| [superpowers/specs/2026-10-31-hotfix-loader-design.md](superpowers/specs/2026-10-31-hotfix-loader-design.md) | 远程热补丁加载器的清单格式、配置、注入/还原契约与验收标准 | 实现步骤、具体补丁内容 |
 | [superpowers/plans/2026-10-26-toolkit-webui.md](superpowers/plans/2026-10-26-toolkit-webui.md) | 工具台的实现计划（历史文档，只读） | 设计取舍的理由 |
 
 ## 约定
