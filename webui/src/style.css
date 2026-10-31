@@ -430,3 +430,10 @@ body {
     width: 130px;
   }
 }
+
+.tk-item-count {
+  margin-left: auto;
+  font-family: var(--tk-mono);
+  font-size: 10px;
+  color: var(--tk-muted);
+}

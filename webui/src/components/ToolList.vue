@@ -8,19 +8,16 @@ const { t } = useI18n()
 </script>
 
 <template>
-  <aside class="tk-side">
-    <div class="tk-side-label">{{ t('tools', '工具') }}</div>
-    <div v-if="!tools.length" class="tk-side-empty">{{ t('empty', '当前没有注册任何工具') }}</div>
-    <button
-      v-for="tool in tools"
-      :key="tool.name"
-      type="button"
-      class="tk-item"
-      :class="{ on: tool.name === selected }"
-      @click="emit('select', tool.name)"
-    >
-      <span class="dot" :class="{ off: !tool.active }"></span>
-      <span class="tk-item-name">{{ tool.name }}</span>
-    </button>
-  </aside>
+  <div v-if="!tools.length" class="tk-side-empty">{{ t('empty', '当前没有注册任何工具') }}</div>
+  <button
+    v-for="tool in tools"
+    :key="tool.name"
+    type="button"
+    class="tk-item"
+    :class="{ on: tool.name === selected }"
+    @click="emit('select', tool.name)"
+  >
+    <span class="dot" :class="{ off: !tool.active }"></span>
+    <span class="tk-item-name">{{ tool.name }}</span>
+  </button>
 </template>
