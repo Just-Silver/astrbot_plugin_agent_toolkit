@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from astrbot.api import AstrBotConfig, logger, star
 
+from .modules.hotfix.runtime import HotfixRuntime
+from .modules.hotfix.webapi import register_hotfix_routes
 from .modules.webfetch.tool import WebFetchTool
 from .modules.webfetch.webapi import register_routes
 
@@ -29,6 +31,11 @@ class Main(star.Star):
         # The view must stay reachable even when the tool is disabled, so routes
         # are registered before the enabled check.
         register_routes(self.context, self, PLUGIN_NAME)
+        register_hotfix_routes(self.context, self, PLUGIN_NAME)
+        # Hotfixes are independent of the web_fetch switch and must be applied
+        # before the early return below.
+        self._hotfix = HotfixRuntime(self.config, logger)
+        self._hotfix.apply()
         if not self.config.get("enabled", True):
             logger.info("web_fetch is disabled by plugin config.")
             return
@@ -41,4 +48,5 @@ class Main(star.Star):
         )
 
     async def terminate(self) -> None:
-        """Release resources. The tool holds none."""
+        """Release resources and restore every injected patch."""
+        self._hotfix.revert()

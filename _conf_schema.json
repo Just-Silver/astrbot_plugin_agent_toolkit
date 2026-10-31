@@ -30,5 +30,26 @@
     "type": "list",
     "default": [],
     "hint": "填写域名即可，子域同样生效；端口会被忽略。"
+  },
+  "hotfix": {
+    "description": "远程热补丁",
+    "type": "object",
+    "items": {
+      "enabled": {
+        "description": "启用远程热补丁",
+        "type": "bool",
+        "default": false
+      },
+      "repo": {
+        "description": "热补丁仓库地址，仅支持 https",
+        "type": "string",
+        "default": "https://github.com/Just-Silver/AstrBot-hotfix"
+      },
+      "ref": {
+        "description": "分支、标签或提交；留空跟随默认分支",
+        "type": "string",
+        "default": ""
+      }
+    }
   }
 }
