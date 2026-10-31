@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -17,12 +17,7 @@ class SelectionStore:
         self._slug = slug
 
     def load(self) -> set[str]:
-        repository = self._read().get("repos", {})
-        if not isinstance(repository, dict):
-            return set()
-        entry = repository.get(self._slug, {})
-        if not isinstance(entry, dict):
-            return set()
+        entry = self._entry()
         selected = entry.get("selected", [])
         if not isinstance(selected, list):
             return set()
@@ -30,12 +25,34 @@ class SelectionStore:
 
     def save(self, selected: Iterable[str]) -> None:
         data = self._read()
-        repositories = data.get("repos")
+        entry = self._entry(data)
+        entry["selected"] = sorted({item for item in selected if isinstance(item, str) and item})
+        self._write_entry(data, entry)
+
+    def load_applied(self) -> dict[str, dict[str, str]]:
+        entry = self._entry()
+        applied = entry.get("applied", {})
+        if not isinstance(applied, dict):
+            return {}
+        return {
+            name: {key: value for key, value in record.items() if isinstance(key, str) and isinstance(value, str)}
+            for name, record in applied.items()
+            if isinstance(name, str) and isinstance(record, dict)
+        }
+
+    def save_applied(self, applied: Mapping[str, Mapping[str, str]]) -> None:
+        data = self._read()
+        entry = self._entry(data)
+        entry["applied"] = {name: dict(record) for name, record in applied.items()}
+        self._write_entry(data, entry)
+
+    def _entry(self, data: dict[str, Any] | None = None) -> dict[str, Any]:
+        source = data if data is not None else self._read()
+        repositories = source.get("repos")
         if not isinstance(repositories, dict):
-            repositories = {}
-        repositories[self._slug] = {"selected": sorted({item for item in selected if isinstance(item, str) and item})}
-        data["repos"] = repositories
-        self._write(data)
+            return {}
+        entry = repositories.get(self._slug)
+        return entry if isinstance(entry, dict) else {}
 
     def _read(self) -> dict[str, Any]:
         try:
@@ -43,6 +60,14 @@ class SelectionStore:
         except (OSError, json.JSONDecodeError):
             return {}
         return data if isinstance(data, dict) else {}
+
+    def _write_entry(self, data: dict[str, Any], entry: dict[str, Any]) -> None:
+        repositories = data.get("repos")
+        if not isinstance(repositories, dict):
+            repositories = {}
+        repositories[self._slug] = entry
+        data["repos"] = repositories
+        self._write(data)
 
     def _write(self, data: dict[str, Any]) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)

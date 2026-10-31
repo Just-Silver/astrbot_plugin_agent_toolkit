@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import re
+import shutil
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -20,6 +23,7 @@ from .repo import RepoCache, repo_slug
 from .selection import SelectionStore
 
 PLUGIN_DATA_DIR = "astrbot_plugin_agent_toolkit"
+_VERSION_SAFE = re.compile(r"[^A-Za-z0-9._-]+")
 
 
 def astrbot_version() -> str:
@@ -54,6 +58,9 @@ class HotfixRuntime:
         self._data_root = Path(data_root) if data_root is not None else _default_data_root()
         self._repo = RepoCache(self._data_root, timeout=repo_timeout)
         self._loader = PatchLoader()
+        self._applied: dict[str, Any] = {}
+        self._applied_versions: dict[str, dict[str, str]] = {}
+        self._outdated: set[str] = set()
         self._specs: list[PatchSpec] = []
         self._results: dict[str, dict[str, Any]] = {}
         self._selected: set[str] = set()
@@ -76,6 +83,9 @@ class HotfixRuntime:
         self._error = ""
         self._results = {}
         self._specs = []
+        self._applied = {}
+        self._applied_versions = {}
+        self._outdated = set()
         self._loader.revert_all()
 
         if not enabled:
@@ -109,11 +119,14 @@ class HotfixRuntime:
         if warnings and not specs and not self._error:
             self._error = warnings[0]
         self._specs = specs
-        self._selected = self._store(repo).load()
+
+        store = self._store(repo)
+        self._selected = store.load()
+        self._applied_versions = store.load_applied()
 
         applied = skipped = failed = 0
         for spec in specs:
-            result = self._evaluate(spec)
+            result = self._evaluate(spec, store)
             self._results[spec.name] = result
             if result["state"] == STATE_APPLIED:
                 applied += 1
@@ -160,6 +173,31 @@ class HotfixRuntime:
         self.apply(sync_repo=False)
         return self.status()
 
+    def update(self, names: Sequence[str]) -> dict[str, Any]:
+        """Adopt the latest repository version for the named patches."""
+
+        if not self._repo_url:
+            return self.status()
+        latest = {spec.name: spec for spec in self._specs}
+        store = self._store(self._repo_url)
+        applied = store.load_applied()
+        for name in names:
+            spec = latest.get(name)
+            if spec is None:
+                continue
+            applied[name] = {
+                "version": spec.version,
+                "applied_at": datetime.now(timezone.utc).isoformat(),
+            }
+            self._ensure_snapshot(spec)
+        try:
+            store.save_applied(applied)
+        except OSError as exc:
+            self._error = f"cannot save applied versions: {exc}"
+            self._logger.warning("[hotfix] %s", self._error)
+        self.apply(sync_repo=False)
+        return self.status()
+
     def status(self) -> dict[str, Any]:
         """Return the snapshot consumed by the management view."""
 
@@ -189,7 +227,7 @@ class HotfixRuntime:
         for spec in specs:
             self._results[spec.name] = self._result(spec, STATE_DISABLED, "")
 
-    def _evaluate(self, spec: PatchSpec) -> dict[str, Any]:
+    def _evaluate(self, spec: PatchSpec, store: SelectionStore) -> dict[str, Any]:
         if spec.name not in self._selected:
             return self._result(spec, STATE_DISABLED, "")
         current = astrbot_version()
@@ -197,19 +235,79 @@ class HotfixRuntime:
             reason = f"astrbot {current or 'unknown'} does not satisfy {spec.astrbot}"
             self._logger.info("[hotfix] skipped: %s: %s", spec.name, reason)
             return self._result(spec, STATE_INCOMPATIBLE, reason)
+
+        recorded = self._applied_versions.get(spec.name, {})
+        recorded_version = str(recorded.get("version") or "")
+        outdated = bool(recorded_version and recorded_version != spec.version)
+        effective = spec
+        if outdated:
+            snapshot = self._snapshot_dir(spec.name, recorded_version)
+            if snapshot.is_dir():
+                effective = self._from_snapshot(spec, snapshot)
+            else:
+                outdated = False
+
         try:
-            self._loader.load(spec)
+            patch = self._loader.load(effective)
         except Exception as exc:  # noqa: BLE001 - one patch must not break the rest
             self._logger.warning("[hotfix] failed: %s: %s", spec.name, exc)
             return self._result(spec, STATE_FAILED, str(exc))
-        targets = ", ".join(f"{target.module}.{target.attribute}" for target in spec.targets)
-        self._logger.info("[hotfix] applied: %s -> %s", spec.name, targets)
-        return self._result(
+
+        self._applied[spec.name] = patch
+        if outdated:
+            self._outdated.add(spec.name)
+            self._logger.info(
+                "[hotfix] applied: %s v%s (latest v%s available)",
+                spec.name,
+                recorded_version,
+                spec.version,
+            )
+        else:
+            self._remember_applied(spec, store)
+            targets = ", ".join(f"{target.module}.{target.attribute}" for target in spec.targets)
+            self._logger.info("[hotfix] applied: %s v%s -> %s", spec.name, spec.version, targets)
+
+        result = self._result(
             spec,
             STATE_APPLIED,
             "",
             applied_at=datetime.now(timezone.utc).isoformat(),
         )
+        result["applied_version"] = recorded_version if outdated else spec.version
+        result["outdated"] = outdated
+        return result
+
+    def _remember_applied(self, spec: PatchSpec, store: SelectionStore) -> None:
+        self._applied_versions[spec.name] = {
+            "version": spec.version,
+            "applied_at": datetime.now(timezone.utc).isoformat(),
+        }
+        try:
+            store.save_applied(self._applied_versions)
+        except OSError as exc:
+            self._logger.warning("[hotfix] cannot save applied versions: %s", exc)
+        self._ensure_snapshot(spec)
+
+    def _ensure_snapshot(self, spec: PatchSpec) -> None:
+        directory = spec.directory or spec.file.parent
+        target = self._snapshot_dir(spec.name, spec.version)
+        if target.is_dir():
+            return
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.copytree(directory, target)
+        except OSError as exc:
+            self._logger.warning("[hotfix] cannot snapshot %s: %s", spec.name, exc)
+
+    def _from_snapshot(self, spec: PatchSpec, snapshot: Path) -> PatchSpec:
+        directory = spec.directory or spec.file.parent
+        relative = spec.file.relative_to(directory) if spec.file.is_relative_to(directory) else Path(spec.file.name)
+        return replace(spec, file=snapshot / relative, directory=snapshot)
+
+    def _snapshot_dir(self, name: str, version: str) -> Path:
+        slug = repo_slug(self._repo_url) if self._repo_url else "_"
+        safe_version = _VERSION_SAFE.sub("_", version) or "0"
+        return self._data_root / "applied" / slug / name / safe_version
 
     def _result(
         self,
@@ -228,6 +326,10 @@ class HotfixRuntime:
             "state": state,
             "reason": reason,
             "applied_at": applied_at,
+            "latest_version": spec.version,
+            "applied_version": "",
+            "outdated": False,
+            "changelog": list(spec.changelog),
         }
 
     def _store(self, repo: str) -> SelectionStore:

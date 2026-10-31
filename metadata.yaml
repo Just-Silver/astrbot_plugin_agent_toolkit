@@ -2,7 +2,7 @@ name: astrbot_plugin_agent_toolkit
 display_name: Agent Toolkit
 short_desc: 为 Agent 提供网页抓取工具（web_fetch）与远程热补丁管理
 desc: 为 AstrBot Agent 提供可独立启用的工具集合。当前包含网页抓取（正文提取、大小与超时上限、SSRF 防护）与远程热补丁（从 git 仓库拉取补丁、按需注入、独立管理视图）。
-version: v0.3.0-beta.4
+version: v0.3.0-beta.5
 author: Just-Silver
 repo: https://github.com/Just-Silver/astrbot_plugin_agent_toolkit
 astrbot_version: ">=4.29,<5"

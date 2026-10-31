@@ -99,6 +99,41 @@ def test_load_manifest_keeps_first_on_duplicate_name(tmp_path):
     assert len(warnings) == 1
 
 
+def test_load_manifest_reads_version_and_changelog(tmp_path):
+    (tmp_path / "hotfix.json").write_text('{"schema": 1}', encoding="utf-8")
+    write_patch(
+        tmp_path,
+        "demo",
+        {
+            "file": "f.py",
+            "version": "1.2.3",
+            "changelog": ["修复 A", "修复 B"],
+            "targets": [{"module": "m", "attribute": "a", "source": "s"}],
+        },
+        {"f.py": ""},
+    )
+
+    specs, _ = load_manifest(tmp_path)
+
+    assert specs[0].version == "1.2.3"
+    assert specs[0].changelog == ("修复 A", "修复 B")
+
+
+def test_version_defaults_to_zero(tmp_path):
+    (tmp_path / "hotfix.json").write_text('{"schema": 1}', encoding="utf-8")
+    write_patch(
+        tmp_path,
+        "demo",
+        {"file": "f.py", "targets": [{"module": "m", "attribute": "a", "source": "s"}]},
+        {"f.py": ""},
+    )
+
+    specs, _ = load_manifest(tmp_path)
+
+    assert specs[0].version == "0"
+    assert specs[0].changelog == ()
+
+
 def test_import_as_defaults_to_target_parent_package(tmp_path):
     (tmp_path / "hotfix.json").write_text('{"schema": 1}', encoding="utf-8")
     write_patch(

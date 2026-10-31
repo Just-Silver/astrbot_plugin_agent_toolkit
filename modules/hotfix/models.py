@@ -31,3 +31,6 @@ class PatchSpec:
     astrbot: str
     import_as: str
     targets: tuple[Target, ...]
+    version: str = "0"
+    changelog: tuple[str, ...] = ()
+    directory: Path | None = None

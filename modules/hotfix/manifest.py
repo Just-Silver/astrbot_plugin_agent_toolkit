@@ -115,6 +115,18 @@ def _load_patch(patch_dir: Path, manifest_path: Path) -> PatchSpec:
     if not isinstance(astrbot, str):
         raise ManifestError("astrbot must be a string")
 
+    version = data.get("version") or "0"
+    if not isinstance(version, str) or not version.strip():
+        raise ManifestError("version must be a non-empty string")
+
+    changelog_raw = data.get("changelog") or []
+    if isinstance(changelog_raw, str):
+        changelog = (changelog_raw,)
+    elif isinstance(changelog_raw, list) and all(isinstance(item, str) for item in changelog_raw):
+        changelog = tuple(changelog_raw)
+    else:
+        raise ManifestError("changelog must be a string or a list of strings")
+
     targets = _parse_targets(data.get("targets"))
 
     raw_file = data.get("file")
@@ -140,6 +152,9 @@ def _load_patch(patch_dir: Path, manifest_path: Path) -> PatchSpec:
         astrbot=astrbot,
         import_as=import_as,
         targets=targets,
+        version=version,
+        changelog=changelog,
+        directory=patch_dir,
     )
 
 
