@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from modules.hotfix.loader import PatchLoadError, PatchLoader
+from modules.hotfix.loader import PatchLoader, PatchLoadError
 from modules.hotfix.models import PatchSpec, Target
 
 

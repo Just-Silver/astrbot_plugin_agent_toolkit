@@ -36,12 +36,8 @@ class PatchLoader:
                 target_module = importlib.import_module(target.module)
                 value = getattr(patch_module, target.source)
                 if not hasattr(target_module, target.attribute):
-                    raise PatchLoadError(
-                        f"{spec.name}: {target.module}.{target.attribute} does not exist"
-                    )
-                replacements.append(
-                    (target_module, target.attribute, getattr(target_module, target.attribute))
-                )
+                    raise PatchLoadError(f"{spec.name}: {target.module}.{target.attribute} does not exist")
+                replacements.append((target_module, target.attribute, getattr(target_module, target.attribute)))
                 setattr(target_module, target.attribute, value)
         except Exception as exc:
             self._restore(replacements)

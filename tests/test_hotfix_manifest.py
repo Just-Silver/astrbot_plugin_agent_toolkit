@@ -35,8 +35,18 @@ def test_load_manifest_rejects_missing_root_manifest(tmp_path):
 
 def test_load_manifest_reads_sorted_patches(tmp_path):
     (tmp_path / "hotfix.json").write_text('{"schema": 1}', encoding="utf-8")
-    write_patch(tmp_path, "b-fix", {"file": "fix.py", "targets": [{"module": "m", "attribute": "a", "source": "s"}]}, {"fix.py": ""})
-    write_patch(tmp_path, "a-fix", {"file": "fix.py", "targets": [{"module": "m", "attribute": "a", "source": "s"}]}, {"fix.py": ""})
+    write_patch(
+        tmp_path,
+        "b-fix",
+        {"file": "fix.py", "targets": [{"module": "m", "attribute": "a", "source": "s"}]},
+        {"fix.py": ""},
+    )
+    write_patch(
+        tmp_path,
+        "a-fix",
+        {"file": "fix.py", "targets": [{"module": "m", "attribute": "a", "source": "s"}]},
+        {"fix.py": ""},
+    )
 
     specs, warnings = load_manifest(tmp_path)
 
@@ -46,7 +56,9 @@ def test_load_manifest_reads_sorted_patches(tmp_path):
 
 def test_load_manifest_rejects_path_traversal(tmp_path):
     (tmp_path / "hotfix.json").write_text('{"schema": 1}', encoding="utf-8")
-    write_patch(tmp_path, "bad", {"file": "../../outside.py", "targets": [{"module": "m", "attribute": "a", "source": "s"}]})
+    write_patch(
+        tmp_path, "bad", {"file": "../../outside.py", "targets": [{"module": "m", "attribute": "a", "source": "s"}]}
+    )
 
     specs, warnings = load_manifest(tmp_path)
 

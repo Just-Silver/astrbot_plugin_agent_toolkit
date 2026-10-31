@@ -33,9 +33,7 @@ class SelectionStore:
         repositories = data.get("repos")
         if not isinstance(repositories, dict):
             repositories = {}
-        repositories[self._slug] = {
-            "selected": sorted({item for item in selected if isinstance(item, str) and item})
-        }
+        repositories[self._slug] = {"selected": sorted({item for item in selected if isinstance(item, str) and item})}
         data["repos"] = repositories
         self._write(data)
 
