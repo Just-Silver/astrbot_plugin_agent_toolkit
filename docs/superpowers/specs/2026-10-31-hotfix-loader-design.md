@@ -23,17 +23,19 @@ AstrBot 的部分缺陷只能靠替换上游模块里的对象修复（例如 `c
 
 **做**
 
-- 配置分组 `hotfix`：`enabled` / `repo` / `ref`
+- 配置分组 `hotfix`：`enabled` / `repo` / `ref`（在原生插件配置页编辑，WebUI 只读展示）
 - 根清单 `hotfix.json` 与补丁清单 `patches/*/patch.json` 的解析与校验（schema、路径、版本、targets、目录发现）
 - `git clone --depth 1` / `git fetch` 到插件数据目录，失败回退缓存
 - 模块加载、按 targets 注入、记录原值、幂等 apply、逆序还原
+- 补丁选择状态持久化；默认全部关闭，需在管理界面显式开启
+- 独立管理视图 `hotfix`：来源信息、补丁列表、逐个开关、批量应用、展开详情
 - 结构化日志：每个补丁的 applied / skipped / failed 及原因
 
 **不做**
 
-- 不提供 WebUI 管理界面
+- 不在 WebUI 里修改仓库地址、`ref` 或总开关（配置页是唯一入口，后续再做）
 - 不做签名校验、不校验补丁作者身份（信任配置的仓库）
-- 不做定时轮询；只在插件加载时更新
+- 不做定时轮询；只在插件加载、手动刷新和应用选择时更新
 - 不支持私有仓库 token（将来需要时再加配置）
 - 不替代官方升级流程；上游修复后应停用对应补丁
 
@@ -58,13 +60,27 @@ modules/
     ├── models.py       # Manifest / PatchSpec / Target / AppliedPatch
     ├── manifest.py     # 清单读取、校验、路径与版本检查
     ├── repo.py         # git 命令封装、缓存目录、更新与回退
-    └── loader.py       # 补丁模块加载、注入、还原
+    ├── loader.py       # 补丁模块加载、注入、还原
+    ├── selection.py    # 补丁选择状态读写
+    ├── runtime.py      # apply / revert / refresh / 状态快照
+    └── webapi.py       # 管理视图接口
+
+views/
+├── toolkit/        # 现有视图构建产物
+└── hotfix/         # 新增：热补丁管理视图构建产物
+
+webui/
+├── index.html      # 现有：工具台入口
+├── hotfix.html     # 新增：热补丁入口
+└── src/            # 两个视图共享 bridge / i18n / ThemeShell
 
 tests/
 ├── test_hotfix_manifest.py
 ├── test_hotfix_repo.py
 ├── test_hotfix_loader.py
-└── test_hotfix_runtime.py
+├── test_hotfix_selection.py
+├── test_hotfix_runtime.py
+└── test_hotfix_webapi.py
 ```
 
 `main.py` 新增：
@@ -104,8 +120,9 @@ self._hotfix.apply()
 }
 ```
 
-- `enabled=false` 或 `repo` 为空：完全不触碰 git、不加载补丁
+- `enabled=false` 或 `repo` 为空：完全不触碰 git、不加载补丁；管理视图仍可打开，但只展示缓存与「未启用」提示
 - 读取用 `config.get("hotfix", {})`，缺字段按默认值处理（防止旧配置缺项）
+- 这三个值只在原生插件配置页修改；管理视图只读展示，不写回配置
 
 ## 清单格式
 
@@ -161,11 +178,12 @@ self._hotfix.apply()
 | `description` | 否 | 字符串，仅用于日志 |
 | `file` | 是 | 相对补丁目录的路径；拒绝绝对路径与 `..`，`resolve()` 后必须仍在补丁目录内 |
 | `astrbot` | 否 | PEP 440 版本范围；缺省视为匹配；无法解析则跳过该补丁 |
-| `enabled` | 否 | 布尔，默认 `true`；`false` 时跳过 |
 | `import_as` | 否 | 补丁模块的导入名；缺省由 target 推导，见下节。`name` 中的非标识符字符替换为 `_` |
 | `targets` | 是 | 非空数组，每个 target 必须有非空的 `module` / `attribute` / `source` |
 
 未知字段一律忽略，保证清单可向前扩展。
+
+补丁**默认不启用**，是否注入由管理界面的选择状态决定（见「选择状态」）。仓库无法通过清单强制某个补丁生效。
 
 `target.attribute` 必须已存在于目标模块（本设计只做替换，不做新增）；不存在视为补丁与当前上游脱节，整补丁失败。
 
@@ -179,18 +197,44 @@ self._hotfix.apply()
 ## 数据目录
 
 ```
-<data>/plugin_data/astrbot_plugin_agent_toolkit/hotfix/<repo-slug>/
-├── .git/
-├── hotfix.json
-└── <补丁文件...>
+<data>/plugin_data/astrbot_plugin_agent_toolkit/hotfix/
+├── state.json                      # 选择状态，按 repo-slug 分组
+└── <repo-slug>/                    # 补丁仓库缓存
+    ├── .git/
+    ├── hotfix.json
+    └── patches/
 ```
 
 - 根路径用 `get_astrbot_plugin_data_path()`，不硬编码绝对路径
 - `repo-slug`：取仓库 URL 的 `owner/repo`，转小写，非 `[a-z0-9]` 字符替换为 `-`，例如 `https://github.com/Just-Silver/AstrBot-hotfix` → `just-silver_astrbot-hotfix`
 - 同一仓库换 `ref` 复用同一目录，通过 fetch + reset 切换，不新增目录
-- 不做自动清理；文档说明「删除该目录即可强制重新下载」
+- 选择状态与仓库缓存分开存放：删除缓存目录不会丢失用户的开关选择
+- 不做自动清理；文档说明「删除 `<repo-slug>/` 即可强制重新下载」
 
 选 `plugin_data` 而非 `data/temp` 的原因：这是跨重启可用的持久缓存，需要离线回退；`temp` 是可清理的临时区。也不能放插件安装目录，WebUI 更新插件会整目录覆盖。
+
+## 选择状态
+
+`state.json` 记录用户显式开启的补丁：
+
+```json
+{
+  "repos": {
+    "just-silver_astrbot-hotfix": {
+      "selected": ["forward-content"],
+      "last_commit": "3f9c1ab",
+      "updated_at": "2026-10-31T14:22:00+08:00"
+    }
+  }
+}
+```
+
+- 只记录选中的补丁名；不在列表里的补丁视为关闭
+- 默认全部关闭：首次加载、新增补丁都需要用户在管理界面显式开启
+- 状态按 `repo-slug` 分组，切换仓库不会丢掉原仓库的选择
+- 仓库里暂时消失的补丁名保留在状态里，重新出现时恢复原选择
+- 写入使用「读-改-写 + 临时文件替换」，避免半写文件
+- 文件损坏或 JSON 非法：视为全部关闭，`warning`，不阻断加载
 
 ## 加载流程
 
@@ -199,11 +243,13 @@ apply():
   1. 校验配置：enabled、repo 为 https
   2. 更新仓库到本地缓存（失败则用现有缓存；无缓存则跳过全部）
   3. 读取并校验根清单 hotfix.json（失败则跳过全部）
-  4. 扫描 patches/*/patch.json，按目录名排序，逐个补丁：
-     a. 校验补丁清单、enabled、name 唯一性、astrbot 版本
-     b. 加载补丁模块
-     c. 依次注入 targets（任一失败则回滚该补丁已注入的部分，整补丁标记 failed）
-  5. 输出汇总日志
+  4. 读取选择状态（缺失时视为全部关闭）
+  5. 扫描 patches/*/patch.json，按目录名排序，逐个补丁：
+     a. 校验补丁清单、name 唯一性、astrbot 版本
+     b. 未被选择的补丁标记 disabled，跳过
+     c. 加载补丁模块
+     d. 依次注入 targets（任一失败则回滚该补丁已注入的部分，整补丁标记 failed）
+  6. 输出汇总日志，并更新状态快照供管理界面读取
 ```
 
 `apply()` 可重复调用：每次先 `revert()` 再重新执行，保证不叠加。
@@ -270,6 +316,122 @@ spec.loader.exec_module(module)
 - 单个属性还原失败只记录 warning，继续还原其余属性
 - `revert()` 可重复调用，无副作用
 
+## 管理界面
+
+### 视图入口
+
+- 独立视图 `hotfix`，与 `toolkit` 平级；AstrBot 通过插件根 `views/<name>/index.html` 发现
+- 前端仍是同一个 `webui/` 工程，Vite 多入口：`index.html` → `views/toolkit/`，`hotfix.html` → `views/hotfix/`
+- 共享 `bridge.ts`、`i18n.ts`、`ThemeShell.vue`；不引入路由与状态库
+- i18n 写在 `.astrbot-plugin/i18n/<locale>.json` 的 `views.hotfix.*`，键缺失时前端回退到中文默认值
+
+### 页面结构
+
+```
+热补丁                                              [刷新]
+Just-Silver/AstrBot-hotfix · main · 3f9c1ab · 更新于 14:22
+2 个补丁 · 1 个已应用 · 1 个待应用
+[拉取失败：...                                              ×]
+
+┌──────────────────────────────────────────────────────────┐
+│ 补丁                      │ 适用版本   │ 状态     │ 启用 │
+│ ▾ forward-content          │ >=4.29,<5 │ 已应用   │ 开   │
+│   引用合并转发时读不到正文  │           │          │      │
+│   ├ 目标：...extractor.OneBotPayloadParser              │
+│   ├ 文件：patches/forward-content/chain_parser.py       │
+│   └ 上次应用：2026-10-31 14:22 · 成功                    │
+│ ▸ another-fix              │ >=5.0     │ 版本不匹配│ 关   │
+│   当前 4.29.4，要求 >=5.0                                │
+└──────────────────────────────────────────────────────────┘
+                                   [放弃] [应用更改 (2)]
+```
+
+- 主行只显示：名称 + 描述、适用版本、状态、开关
+- 点行展开：目标 `module.attribute`、文件路径、上次应用时间与结果
+- 版本不匹配与失败原因以状态下方的小字展示，不额外占列
+- 顶部来源行只读：仓库、`ref`、commit、更新时间；不提供编辑入口
+- 顶部汇总：`N 个补丁 · M 个已应用 · K 个待应用`
+- 底部只在有未保存改动时出现「放弃」与「应用更改（N）」
+
+### 状态枚举
+
+| 状态 | 含义 |
+|---|---|
+| `applied` | 已启用且注入成功 |
+| `disabled` | 未启用（默认） |
+| `incompatible` | 已启用，但当前 AstrBot 版本不匹配 |
+| `failed` | 已启用，但加载或注入失败；`reason` 说明原因 |
+| `pending` | 仅前端本地状态：勾选已改、尚未应用 |
+
+### 接口契约
+
+接口前缀 `/{plugin_name}/hotfix`，用 `context.register_web_api` 注册，沿用现有视图的鉴权。
+
+**`GET /{plugin_name}/hotfix/status`**
+
+```json
+{
+  "enabled": true,
+  "repo": "https://github.com/Just-Silver/AstrBot-hotfix",
+  "ref": "",
+  "commit": "3f9c1ab",
+  "updated_at": "2026-10-31T14:22:00+08:00",
+  "astrbot_version": "4.29.4",
+  "patches": [
+    {
+      "name": "forward-content",
+      "description": "引用合并转发时读不到转发正文",
+      "file": "patches/forward-content/chain_parser.py",
+      "astrbot": ">=4.29,<5",
+      "targets": ["astrbot.core.utils.quoted_message.extractor.OneBotPayloadParser"],
+      "selected": true,
+      "state": "applied",
+      "reason": "",
+      "applied_at": "2026-10-31T14:22:00+08:00"
+    }
+  ],
+  "error": ""
+}
+```
+
+- `patches` 来自最近一次成功读取的清单缓存；从未成功时为空数组
+- `error` 非空表示最近一次拉取/应用失败，前端显示提示条
+- 未启用（`enabled=false`）时仍返回缓存清单，供用户查看
+
+**`POST /{plugin_name}/hotfix/selection`**
+
+```json
+{"selected": ["forward-content"]}
+```
+
+- 只接受当前清单里存在的补丁名，未知名字忽略
+- 保存状态 → `revert()` → `apply()`，使用最新缓存（不触发 git）
+- 返回结构与 `GET /status` 相同
+- 请求体不是对象、`selected` 不是字符串数组：400
+
+**`POST /{plugin_name}/hotfix/refresh`**
+
+- 强制更新仓库（失败回退缓存）→ 重读清单 → 按现有选择 `revert()` + `apply()`
+- 返回结构与 `GET /status` 相同；业务失败放在 `error`，不返回 500
+
+### 交互流程
+
+1. 进入页面：`GET /status`，渲染来源、汇总与列表
+2. 勾选变化：只改本地状态，行标记 `pending`，底部出现「应用更改（N）」
+3. 「放弃」：丢弃本地勾选，恢复为后端返回的 `selected`
+4. 「应用更改」：`POST /selection`，成功后用响应覆盖本地状态；期间禁用开关与按钮，显示加载态
+5. 「刷新」：`POST /refresh`，成功后更新 commit 与列表；失败时保留原列表并显示提示条
+6. `enabled=false`：整页提示「热补丁未启用，请在插件配置页开启」，开关与按钮禁用，仍展示缓存清单
+
+### 前端组件
+
+| 组件 | 职责 |
+|---|---|
+| `HotfixView.vue` | 页面容器：加载、错误条、汇总、保存/刷新动作 |
+| `HotfixList.vue` | 补丁行、展开详情、开关 |
+| `HotfixSummary.vue` | 计数汇总与待应用提示 |
+| `bridge.ts` 扩展 | `getHotfixStatus()` / `applyHotfixSelection()` / `refreshHotfix()` |
+
 ## 失败处理
 
 | 情况 | 行为 |
@@ -286,6 +448,9 @@ spec.loader.exec_module(module)
 | 版本不匹配 | 跳过该补丁，`info` |
 | 补丁模块 import 失败 | 该补丁 failed，其余继续 |
 | target 导入失败 / source 不存在 / attribute 不存在 | 该补丁 failed 并回滚，其余继续 |
+| 选择状态文件损坏或 JSON 非法 | 视为全部关闭，`warning` |
+| `selection` 请求含未知补丁名 | 忽略未知名字，其余正常保存 |
+| 应用选择时注入失败 | 返回 `status` 中该补丁 `failed` + `reason`，HTTP 仍为 200 |
 
 任何情况下都不向插件生命周期抛异常，`web_fetch` 注册不受影响。
 
@@ -321,23 +486,29 @@ spec.loader.exec_module(module)
 |---|---|
 | manifest | 根清单合法；`schema` 不符；根清单缺失/非法；子目录无 `patch.json` 被忽略；只扫一层不递归；补丁清单缺 `file`/`targets`；`file` 绝对路径与 `..` 穿越；`astrbot` 范围匹配/不匹配/无法解析；`name` 缺省取目录名；`name` 重复；未知字段被忽略 |
 | repo | 目录不存在时执行 clone；存在时 fetch + reset；`ref` 为 SHA 的路径；git 失败时返回缓存状态；超时 |
-| loader | 正常注入生效；重复 apply 不叠加；单个 target 失败时整补丁回滚；`attribute` 不存在时整补丁回滚；`revert` 恢复原值；补丁模块 import 抛错时清理 `sys.modules` |
-| runtime | 配置关闭时不调用 git；清单缺失时跳过；一个补丁失败不影响另一个；`terminate` 后目标恢复 |
+| selection | 默认全部关闭；保存后读回一致；状态文件损坏视为全关；按 repo-slug 隔离；未知补丁名不写入 |
+| loader | 正常注入生效；重复 apply 不叠加；单个 target 失败时整补丁回滚；`attribute` 不存在时整补丁回滚；`revert` 恢复原值；补丁模块 import 抛错时清理 `sys.modules`；未选择的补丁不加载 |
+| runtime | 配置关闭时不调用 git；清单缺失时跳过；一个补丁失败不影响另一个；`terminate` 后目标恢复；`selection` 变更后只应用新选择 |
+| webapi | `status` 字段完整；`selection` 归一化未知名字；非数组请求返回 400；业务失败走 `error` 而非 500；未启用时仍返回缓存清单 |
 
 版本与 git 调用都用 monkeypatch 打桩；模块注入用 `types.ModuleType` 构造假目标模块。
 
 ## 验收标准
 
 1. 默认配置下插件行为与现在完全一致，日志中不出现 `[hotfix]`，不产生任何 git 子进程
-2. 配置合法仓库后，日志出现 `applied`，目标模块属性被替换；引用合并转发解析使用补丁实现
-3. 清单声明的 AstrBot 版本不匹配时，目标模块保持原样，日志出现 `skipped` 及原因
-4. 断网且已有缓存时仍能应用补丁，日志说明使用了缓存
-5. 断网且无缓存时插件正常加载，`web_fetch` 可用
-6. 清单 `file` 含路径穿越时该补丁被拒绝，其他补丁仍可生效
-7. 插件热重载或停用后，被替换的属性恢复原值
-8. 同一配置连续两次 `apply()`，目标属性最终只被替换一次
-9. 新增补丁只新建 `patches/<name>/` 并放入 `patch.json`，根 `hotfix.json` 无需改动
-10. `patches/` 下没有 `patch.json` 的目录被忽略，不影响其他补丁
+2. 配置合法仓库但未开启任何补丁时，不注入任何模块，管理界面中所有补丁为「未启用」
+3. 在管理界面勾选并「应用更改」后，日志出现 `applied`，目标模块属性被替换，补丁状态变为「已应用」
+4. 清单声明的 AstrBot 版本不匹配时，目标模块保持原样，日志出现 `skipped`，界面显示「版本不匹配」及当前版本
+5. 断网且已有缓存时仍能应用补丁，日志说明使用了缓存
+6. 断网且无缓存时插件正常加载，`web_fetch` 可用，管理界面显示错误提示条
+7. 清单 `file` 含路径穿越时该补丁被拒绝，其他补丁仍可生效
+8. 插件热重载或停用后，被替换的属性恢复原值
+9. 同一配置连续两次 `apply()`，目标属性最终只被替换一次
+10. 新增补丁只新建 `patches/<name>/` 并放入 `patch.json`，根 `hotfix.json` 无需改动
+11. `patches/` 下没有 `patch.json` 的目录被忽略，不影响其他补丁
+12. 管理视图可打开，来源行显示仓库、`ref`、commit 与更新时间；勾选变化后出现「应用更改（N）」，点「放弃」恢复原选择
+13. 「刷新」更新 commit 与列表，已开启的补丁保持开启
+14. `hotfix.enabled=false` 时管理视图仍可打开，显示「未启用」提示，开关与操作按钮禁用
 
 ## 跨仓库交付
 
@@ -362,7 +533,7 @@ AstrBot-hotfix/
 
 以下不在本次范围，记录避免遗忘：
 
-- WebUI 里查看已应用补丁与版本
+- WebUI 里编辑仓库地址、`ref` 与总开关
 - 私有仓库 token 配置
 - 定时检查更新
 - 清单签名校验
